@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import { format } from "date-fns";
@@ -45,7 +51,7 @@ interface SortState {
   direction: SortDirection;
 }
 
-export default function PolicyTable() {
+const PolicyTable = forwardRef((props, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +73,10 @@ export default function PolicyTable() {
   const { user } = useUser();
   const { register, handleSubmit, reset, setValue } =
     useForm<EditPolicyFormData>();
+
+  useImperativeHandle(ref, () => ({
+    fetchPolicies,
+  }));
 
   useEffect(() => {
     if (user) {
@@ -820,12 +830,6 @@ export default function PolicyTable() {
             </svg>
             Export to CSV
           </CSVLink>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Add Policy
-          </button>
         </div>
       </div>
 
@@ -1117,4 +1121,8 @@ export default function PolicyTable() {
       )}
     </>
   );
-}
+});
+
+PolicyTable.displayName = "PolicyTable";
+
+export default PolicyTable;
