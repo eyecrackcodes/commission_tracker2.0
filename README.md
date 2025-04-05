@@ -1,127 +1,63 @@
-# Commission Tracker 2.0
+# Commission Tracker
 
-A modern web application for tracking insurance policy commissions, built with Next.js, Supabase, and Clerk Authentication.
-
-## Live Demo
-
-[Access the live application here](#) <!-- You'll add the Vercel URL once deployed -->
+A web application for insurance agents to track their policies and commissions. Built with Next.js, Clerk for authentication, and Supabase for the database.
 
 ## Features
 
-- Policy management with status tracking (Active, Pending, Cancelled)
-- Commission calculation and tracking
-- Date-based filtering and search functionality
-- Export to CSV functionality
-- Secure authentication with Clerk
-- Real-time data updates with Supabase
-- Sortable columns and detailed statistics
+- User authentication with Clerk
+- Policy management (create, read, update, delete)
+- Commission tracking and calculations
+- Agent profile management
+- Policy filtering and search
+- Export policies to CSV
 
 ## Tech Stack
 
-- **Frontend**: Next.js, React, Tailwind CSS
-- **Backend**: Supabase (PostgreSQL)
-- **Authentication**: Clerk
-- **Styling**: Tailwind CSS
-- **Deployment**: Vercel
+- Next.js 14 (App Router)
+- TypeScript
+- Clerk Authentication
+- Supabase Database
+- Tailwind CSS
 
-## Quick Start for Users
+## Environment Variables
 
-1. Visit the application URL (will be provided after deployment)
-2. Sign up for an account using email or social login
-3. Start adding and managing your policies
-4. Use filters and search to organize your data
-5. Export reports as needed using the CSV export feature
+The following environment variables are required:
 
-## For Developers
-
-### Local Development
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/eyecrackcodes/commission_tracker2.0.git
+```env
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+CLERK_SECRET_KEY=your_clerk_secret_key
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 ```
 
+## Deployment on Vercel
+
+1. Fork or clone this repository
+2. Create a new project on Vercel
+3. Connect your repository to Vercel
+4. Add the environment variables in Vercel's project settings
+5. Deploy!
+
+## Local Development
+
+1. Clone the repository
 2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Set up environment variables:
-
-   - Copy `.env.example` to `.env.local`
-   - Fill in your Supabase and Clerk credentials
-
-4. Run the development server:
-
-```bash
-npm run dev
-```
-
-### Deployment
-
-1. **Supabase Setup**
-
-   - Create a new Supabase project
-   - Run the following SQL in the Supabase SQL editor:
-
-   ```sql
-   -- Create policies table
-   CREATE TABLE policies (
-     id SERIAL PRIMARY KEY,
-     user_id TEXT NOT NULL,
-     client TEXT NOT NULL,
-     carrier TEXT NOT NULL,
-     policy_number TEXT NOT NULL,
-     product TEXT NOT NULL,
-     policy_status TEXT NOT NULL DEFAULT 'Pending',
-     commissionable_annual_premium DECIMAL NOT NULL,
-     commission_rate DECIMAL NOT NULL CHECK (commission_rate IN (0.05, 0.20)),
-     commission_due DECIMAL GENERATED ALWAYS AS (commissionable_annual_premium * commission_rate) STORED,
-     first_payment_date DATE,
-     type_of_payment TEXT,
-     inforce_date DATE,
-     date_commission_paid DATE,
-     comments TEXT,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
-   );
-
-   -- Enable Row Level Security
-   ALTER TABLE policies ENABLE ROW LEVEL SECURITY;
-
-   -- Create policy for user access
-   CREATE POLICY "Users can manage their own policies" ON policies
-     FOR ALL TO authenticated
-     USING (auth.uid() = user_id)
-     WITH CHECK (auth.uid() = user_id);
+   ```bash
+   npm install
    ```
+3. Create a `.env` file with the required environment variables
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+5. Open [http://localhost:3000](http://localhost:3000)
 
-2. **Clerk Setup**
+## Database Setup
 
-   - Create a new Clerk application
-   - Configure your authentication methods (email, social providers)
-   - Set up the JWT template
-   - Add your Clerk credentials to environment variables
+The application requires a Supabase database with the following tables:
 
-3. **Vercel Deployment**
-   - Fork this repository
-   - Create a new project in Vercel
-   - Connect it to your forked repository
-   - Add your environment variables in Vercel
-   - Deploy!
+- `policies`
+- `agent_profiles`
 
-## Security
-
-- All data is protected by Row Level Security in Supabase
-- Each user can only access their own policies
-- Secure authentication handled by Clerk
-- All sensitive operations require authentication
-
-## Support
-
-For support, please create an issue in the GitHub repository or contact the development team.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+Refer to the SQL scripts in the `supabase` directory for the complete schema.
