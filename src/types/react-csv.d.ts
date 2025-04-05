@@ -1,5 +1,5 @@
 declare module "react-csv" {
-  import { PropsWithChildren } from "react";
+  import { ReactNode } from "react";
 
   export interface CSVLinkProps {
     data: any[];
@@ -9,10 +9,10 @@ declare module "react-csv" {
     target?: string;
     className?: string;
     style?: React.CSSProperties;
+    children?: ReactNode;
+    onClick?: () => void;
   }
 
-  export const CSVLink: React.ComponentType<PropsWithChildren<CSVLinkProps>>;
-  export const CSVDownload: React.ComponentType<
-    PropsWithChildren<CSVLinkProps>
-  >;
+  export const CSVLink: (props: CSVLinkProps) => JSX.Element;
+  export const CSVDownload: (props: CSVLinkProps) => JSX.Element;
 }
