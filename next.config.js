@@ -59,9 +59,6 @@ const nextConfig = {
     }
     return config;
   },
-  experimental: {
-    runtime: "nodejs", // Use Node.js runtime globally
-  },
 };
 
 module.exports = nextConfig;

@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
     // Record the notification to prevent duplicates
     if (data.userId) {
-      await recordNotification(data.userId);
+      await recordNotification(data.userId, data.newRate);
     }
 
     return NextResponse.json(result);
