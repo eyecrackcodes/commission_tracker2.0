@@ -285,6 +285,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
     });
 
     setFilteredPolicies(result);
+    return result;
   }, [filters, searchInput, policies]);
 
   useEffect(() => {
