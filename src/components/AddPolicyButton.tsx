@@ -5,6 +5,8 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
+import { calculateCommissionRate } from "@/lib/commission";
+import { sendPolicyNotification } from "@/lib/slack";
 
 interface PolicyFormData {
   client: string;
@@ -28,8 +30,32 @@ export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
-  const { register, handleSubmit, reset } = useForm<PolicyFormData>();
+  const [agentProfile, setAgentProfile] = useState<{
+    start_date: string | null;
+  } | null>(null);
+  const { register, handleSubmit, reset, setValue } = useForm<PolicyFormData>();
   const { user } = useUser();
+
+  useEffect(() => {
+    async function fetchAgentProfile() {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from("agent_profiles")
+          .select("start_date")
+          .eq("user_id", user.id)
+          .single();
+
+        if (error) throw error;
+        setAgentProfile(data);
+      } catch (err) {
+        console.error("Error fetching agent profile:", err);
+      }
+    }
+
+    fetchAgentProfile();
+  }, [user]);
 
   const triggerConfetti = () => {
     console.log("Triggering confetti effect");
@@ -61,11 +87,17 @@ export default function AddPolicyButton({
 
     try {
       console.log("Submitting policy data:", data);
+
+      // Calculate commission rate based on tenure
+      const commissionRate = calculateCommissionRate(
+        agentProfile?.start_date || null
+      );
+
       const { error } = await supabase.from("policies").insert([
         {
           ...data,
           user_id: user.id,
-          commission_rate: data.commission_rate / 100,
+          commission_rate: commissionRate,
           created_at: new Date().toISOString(),
         },
       ]);
@@ -74,6 +106,15 @@ export default function AddPolicyButton({
         console.error("Supabase error:", error);
         throw error;
       }
+
+      // Send Slack notification
+      await sendPolicyNotification({
+        client: data.client,
+        carrier: data.carrier,
+        policy_number: data.policy_number,
+        commissionable_annual_premium: data.commissionable_annual_premium,
+        commission_rate: commissionRate,
+      });
 
       console.log("Policy added successfully, showing confetti");
       setShowModal(false);

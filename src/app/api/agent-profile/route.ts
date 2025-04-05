@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs";
 import { createClient } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { NextRequest, NextResponse } from "next/server";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
