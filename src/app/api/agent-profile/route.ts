@@ -16,21 +16,56 @@ const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 // GET handler to fetch the agent profile
 export async function GET() {
   try {
-    const { data: profiles, error } = await supabaseClient
+    const { userId } = auth();
+
+    if (!userId) {
+      console.error("No user ID found in auth()");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    console.log("Fetching profile for user:", userId);
+    const { data: profile, error } = await supabaseClient
       .from("agent_profiles")
-      .select("*");
+      .select("*")
+      .eq("user_id", userId)
+      .single();
 
     if (error) {
-      console.error("Error fetching profiles:", error);
+      console.error("Error fetching profile:", error);
       return NextResponse.json(
         { error: error.message },
         { status: error.code === "PGRST116" ? 404 : 500 }
       );
     }
 
-    return NextResponse.json(profiles);
+    if (!profile) {
+      console.log("No profile found, attempting to create one");
+      // Try to create a profile if it doesn't exist
+      const { data: newProfile, error: createError } = await supabaseClient
+        .from("agent_profiles")
+        .insert([
+          {
+            user_id: userId,
+            start_date: new Date().toISOString().split("T")[0],
+          },
+        ])
+        .select()
+        .single();
+
+      if (createError) {
+        console.error("Error creating profile:", createError);
+        return NextResponse.json(
+          { error: createError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json(newProfile);
+    }
+
+    return NextResponse.json(profile);
   } catch (err) {
-    console.error("Error fetching agent profiles:", err);
+    console.error("Error in GET /api/agent-profile:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }

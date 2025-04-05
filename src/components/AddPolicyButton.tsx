@@ -53,47 +53,26 @@ export default function AddPolicyButton({
 
       try {
         console.log("Fetching agent profile for user:", user.id);
-        const { data, error } = await supabase
-          .from("agent_profiles")
-          .select("start_date")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        const response = await fetch("/api/agent-profile");
 
-        if (error) {
-          console.error("Error fetching agent profile:", error);
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Error fetching agent profile:", errorData);
           setAgentProfile({ start_date: null });
           return;
         }
 
-        if (!data) {
-          console.log("No agent profile found for user:", user.id);
-          // Try to create a profile if it doesn't exist
-          try {
-            const response = await fetch("/api/create-agent-profile", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ userId: user.id }),
-            });
+        const data = await response.json();
+        console.log("Received agent profile:", data);
 
-            if (!response.ok) {
-              const errorData = await response.json();
-              console.error("Error creating agent profile:", errorData);
-            } else {
-              const result = await response.json();
-              console.log("Agent profile created:", result);
-              setAgentProfile({
-                start_date: result.profile?.start_date || null,
-              });
-              return;
-            }
-          } catch (createError) {
-            console.error("Exception creating agent profile:", createError);
-          }
+        if (data) {
+          setAgentProfile({
+            start_date: data.start_date,
+          });
+        } else {
+          console.log("No agent profile data received");
+          setAgentProfile({ start_date: null });
         }
-
-        setAgentProfile(data || { start_date: null });
       } catch (err) {
         console.error("Error in fetchAgentProfile:", err);
         setAgentProfile({ start_date: null });
