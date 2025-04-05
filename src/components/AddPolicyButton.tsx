@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
+import dynamic from "next/dynamic";
+
+const ReactConfetti = dynamic(() => import("react-confetti"), {
+  ssr: false,
+});
 
 interface PolicyFormData {
   client: string;
@@ -27,8 +32,18 @@ export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const { register, handleSubmit, reset } = useForm<PolicyFormData>();
   const { user } = useUser();
+
+  useEffect(() => {
+    if (showConfetti) {
+      const timer = setTimeout(() => {
+        setShowConfetti(false);
+      }, 5000); // Hide confetti after 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [showConfetti]);
 
   const onSubmit = async (data: PolicyFormData) => {
     if (!user) return;
@@ -50,6 +65,7 @@ export default function AddPolicyButton({
 
       setShowModal(false);
       reset();
+      setShowConfetti(true);
       if (onPolicyAdded) {
         onPolicyAdded();
       }
@@ -60,6 +76,14 @@ export default function AddPolicyButton({
 
   return (
     <>
+      {showConfetti && (
+        <ReactConfetti
+          width={window.innerWidth}
+          height={window.innerHeight}
+          recycle={false}
+          numberOfPieces={500}
+        />
+      )}
       <button
         onClick={() => setShowModal(true)}
         className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
