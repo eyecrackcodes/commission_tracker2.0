@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
+import {
+  useState,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+  useCallback,
+} from "react";
 import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import { differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
+import AddPolicyButton from "@/components/AddPolicyButton";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
@@ -80,26 +87,41 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     fetchPolicies,
   }));
 
+  const fetchPolicies = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: supabaseError } = await supabase
+        .from("policies")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (supabaseError) {
+        throw supabaseError;
+      }
+
+      setPolicies(data || []);
+    } catch (err) {
+      console.error("Error fetching policies:", err);
+      setError(
+        "Failed to fetch policies. Please make sure your database is properly set up."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (user) {
       fetchPolicies();
     }
   }, [user, fetchPolicies]);
 
-  useEffect(() => {
-    applyFilters();
-  }, [policies, filters, searchInput, applyFilters]);
-
-  // Debounced search effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setFilters((prev) => ({ ...prev, searchTerm: searchInput }));
-    }, 300); // 300ms delay
-
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     console.log("Starting filter application with:", {
       dateRange: filters.dateRange,
       status: filters.status,
@@ -279,7 +301,20 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     });
 
     setFilteredPolicies(result);
-  };
+  }, [filters, searchInput, policies]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, searchTerm: searchInput }));
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Add a useEffect to reset custom date range when switching to other options
   useEffect(() => {
@@ -291,34 +326,6 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
       }));
     }
   }, [filters.dateRange]);
-
-  const fetchPolicies = async () => {
-    if (!user) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: supabaseError } = await supabase
-        .from("policies")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (supabaseError) {
-        throw supabaseError;
-      }
-
-      setPolicies(data || []);
-    } catch (err) {
-      console.error("Error fetching policies:", err);
-      setError(
-        "Failed to fetch policies. Please make sure your database is properly set up."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Fetch agent profile for tenure calculation
   useEffect(() => {
@@ -481,15 +488,6 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     },
   };
 
-  const handleSearch = () => {
-    setFilters((prev) => ({ ...prev, searchTerm: searchInput }));
-  };
-
-  const clearSearch = () => {
-    setSearchInput("");
-    setFilters((prev) => ({ ...prev, searchTerm: "" }));
-  };
-
   const handleSort = (field: SortField) => {
     setSort((prev) => ({
       field,
@@ -521,7 +519,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   const sortedAndFilteredPolicies = sortPolicies(filteredPolicies);
 
   // Calculate total commission from filtered policies
-  const totalCommission = filteredPolicies.reduce(
+  const totalCommission = sortedAndFilteredPolicies.reduce(
     (sum, policy) => sum + policy.commission_due,
     0
   );
@@ -866,25 +864,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
           Policies
         </h2>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <svg
-              className="h-4 w-4 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
-            Add Policy
-          </button>
+          <AddPolicyButton onPolicyAdded={fetchPolicies} />
         </div>
       </div>
 
@@ -1025,7 +1005,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                   </td>
                 </tr>
               ) : (
-                filteredPolicies.map((policy) => (
+                sortedAndFilteredPolicies.map((policy) => (
                   <tr key={policy.id}>
                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                       {policy.client}

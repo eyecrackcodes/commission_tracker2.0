@@ -16,19 +16,13 @@ const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 // GET handler to fetch the agent profile
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from("agent_profiles")
-      .select("*")
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const { data } = await supabase.from("agent_profiles").select("*").single();
 
     return NextResponse.json(data);
-  } catch (error) {
+  } catch (err) {
+    console.error("Error fetching agent profile:", err);
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }
     );
   }
