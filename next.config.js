@@ -21,6 +21,14 @@ const nextConfig = {
         child_process: false,
         aws4: false,
         encoding: false,
+        stream: false,
+        http: false,
+        https: false,
+        zlib: false,
+        path: false,
+        crypto: false,
+        os: false,
+        querystring: false,
       };
     } else {
       // This is for server-side
