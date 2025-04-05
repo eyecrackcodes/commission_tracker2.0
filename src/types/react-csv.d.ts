@@ -1,18 +1,14 @@
 declare module "react-csv" {
-  import { ReactNode } from "react";
-
   export interface CSVLinkProps {
-    data: any[];
-    headers?: Array<{ label: string; key: string }>;
-    filename?: string;
+    data: string | object[];
+    headers?: { label: string; key: string }[];
     separator?: string;
-    target?: string;
+    filename?: string;
     className?: string;
-    style?: React.CSSProperties;
-    children?: ReactNode;
     onClick?: () => void;
+    children?: React.ReactNode;
   }
 
-  export const CSVLink: (props: CSVLinkProps) => JSX.Element;
-  export const CSVDownload: (props: CSVLinkProps) => JSX.Element;
+  export const CSVLink: React.FC<CSVLinkProps>;
+  export default CSVLink;
 }
