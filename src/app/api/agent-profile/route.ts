@@ -16,7 +16,34 @@ const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 // GET handler to fetch the agent profile
 export async function GET() {
   try {
-    const { data } = await supabase.from("agent_profiles").select("*").single();
+    const { userId } = auth();
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { data, error } = await supabaseClient
+      .from("agent_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error) {
+      // Check if the error is because no profile was found
+      if (error.code === "PGRST116") {
+        // Return 404 with a more user-friendly message
+        return NextResponse.json(
+          {
+            error: "Profile not found",
+            message: "No agent profile exists for this user yet",
+          },
+          { status: 404 }
+        );
+      }
+
+      console.error("Error fetching profile:", error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     return NextResponse.json(data);
   } catch (err) {

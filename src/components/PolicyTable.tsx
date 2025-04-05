@@ -336,6 +336,37 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
 
         console.log("Agent profile response status:", response.status);
 
+        if (response.status === 404) {
+          // If no profile exists, create a default one with today's date
+          const today = new Date().toISOString().split("T")[0];
+          console.log(
+            "No profile found, using default profile with today's date:",
+            today
+          );
+          setAgentProfile({ start_date: today });
+
+          // Create a new profile
+          const createResponse = await fetch("/api/agent-profile", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ start_date: today }),
+          });
+
+          if (!createResponse.ok) {
+            console.error(
+              "Failed to create agent profile:",
+              await createResponse.json()
+            );
+          } else {
+            const newProfile = await createResponse.json();
+            console.log("Created new agent profile:", newProfile);
+            setAgentProfile(newProfile);
+          }
+          return;
+        }
+
         if (!response.ok) {
           const errorData = await response.json();
           console.error("Failed to fetch agent profile:", errorData);
