@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendSlackMessage } from "@/lib/slack-server";
-import { recordNotification } from "@/lib/notification-tracker";
+import { recordNotification } from "@/lib/notification-service";
 
 // Define interfaces for error handling
 interface SlackError extends Error {
