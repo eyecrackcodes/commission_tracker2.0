@@ -65,6 +65,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
+  const [policyToDelete, setPolicyToDelete] = useState<Policy | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({
     status: "all",
     dateRange: "all",
@@ -393,6 +394,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
 
       if (error) throw error;
       setPolicies(policies.filter((policy) => policy.id !== id));
+      setPolicyToDelete(null); // Close the confirmation dialog
     } catch (err) {
       setError("Failed to delete policy");
       console.error("Error deleting policy:", err);
@@ -1048,7 +1050,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(policy.id)}
+                          onClick={() => setPolicyToDelete(policy)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Delete
@@ -1226,6 +1228,33 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {policyToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Confirm Deletion</h2>
+            <p className="mb-6">
+              Are you sure you want to delete the policy for{" "}
+              <span className="font-semibold">{policyToDelete.client}</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setPolicyToDelete(null)}
+                className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(policyToDelete.id)}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

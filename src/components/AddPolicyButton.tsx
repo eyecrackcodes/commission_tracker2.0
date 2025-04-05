@@ -4,11 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
-import dynamic from "next/dynamic";
-
-const ReactConfetti = dynamic(() => import("react-confetti"), {
-  ssr: false,
-});
+import confetti from "canvas-confetti";
 
 interface PolicyFormData {
   client: string;
@@ -32,23 +28,39 @@ export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
   const { register, handleSubmit, reset } = useForm<PolicyFormData>();
   const { user } = useUser();
 
-  useEffect(() => {
-    if (showConfetti) {
-      const timer = setTimeout(() => {
-        setShowConfetti(false);
-      }, 5000); // Hide confetti after 5 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [showConfetti]);
+  const triggerConfetti = () => {
+    console.log("Triggering confetti effect");
+
+    // Fire confetti from the left edge
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { x: 0, y: 0.6 },
+    });
+
+    // Fire confetti from the right edge
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { x: 1, y: 0.6 },
+    });
+
+    // Fire confetti from the center
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { x: 0.5, y: 0.6 },
+    });
+  };
 
   const onSubmit = async (data: PolicyFormData) => {
     if (!user) return;
 
     try {
+      console.log("Submitting policy data:", data);
       const { error } = await supabase.from("policies").insert([
         {
           ...data,
@@ -63,9 +75,16 @@ export default function AddPolicyButton({
         throw error;
       }
 
+      console.log("Policy added successfully, showing confetti");
       setShowModal(false);
       reset();
-      setShowConfetti(true);
+
+      // Trigger confetti after a short delay to ensure the modal is closed
+      setTimeout(() => {
+        console.log("Triggering confetti");
+        triggerConfetti();
+      }, 100);
+
       if (onPolicyAdded) {
         onPolicyAdded();
       }
@@ -76,23 +95,28 @@ export default function AddPolicyButton({
 
   return (
     <>
-      {showConfetti && (
-        <ReactConfetti
-          width={window.innerWidth}
-          height={window.innerHeight}
-          recycle={false}
-          numberOfPieces={500}
-        />
-      )}
       <button
         onClick={() => setShowModal(true)}
-        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
       >
+        <svg
+          className="h-4 w-4 mr-2"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+          />
+        </svg>
         Add Policy
       </button>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-lg w-full max-w-2xl">
             <h2 className="text-2xl font-bold mb-4">Add New Policy</h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

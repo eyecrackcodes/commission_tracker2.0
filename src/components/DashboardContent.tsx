@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import PolicyTable, { PolicyTableRef } from "@/components/PolicyTable";
-import AddPolicyButton from "@/components/AddPolicyButton";
 import AgentProfile from "@/components/AgentProfile";
 
 export default function DashboardContent() {
@@ -21,9 +20,6 @@ export default function DashboardContent() {
         <h1 className="text-3xl font-bold text-gray-900">
           Commission Dashboard
         </h1>
-        {activeTab === "policies" && (
-          <AddPolicyButton onPolicyAdded={handlePolicyAdded} />
-        )}
       </div>
 
       {/* Tabs */}
