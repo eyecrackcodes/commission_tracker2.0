@@ -44,7 +44,7 @@ interface AgentProfile {
   start_date: string | null;
 }
 
-const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
+const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
