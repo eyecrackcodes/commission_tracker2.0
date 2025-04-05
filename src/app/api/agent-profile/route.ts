@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs";
 import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,10 +10,10 @@ if (!supabaseUrl || !supabaseServiceKey) {
   throw new Error("Missing Supabase URL or service role key");
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
 // GET handler to fetch the agent profile
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const { userId } = auth();
 
@@ -21,35 +21,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from("agent_profiles")
       .select("*")
       .eq("user_id", userId)
-      .maybeSingle();
+      .single();
 
     if (error) {
       console.error("Error fetching profile:", error);
-      return NextResponse.json(
-        { error: "Failed to fetch profile" },
-        { status: 500 }
-      );
-    }
-
-    // Parse specializations if it's a string
-    if (data && typeof data.specializations === "string") {
-      try {
-        data.specializations = JSON.parse(data.specializations);
-      } catch (e) {
-        console.error("Error parsing specializations:", e);
-        data.specializations = [];
-      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error in GET /api/agent-profile:", error);
+  } catch (err) {
+    console.error("Error fetching agent profile:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }
     );
   }
@@ -86,7 +73,7 @@ export async function POST(request: NextRequest) {
     console.log("Processed specializations:", processedSpecializations);
 
     // Check if profile exists
-    const { data: existingProfile, error: checkError } = await supabase
+    const { data: existingProfile, error: checkError } = await supabaseClient
       .from("agent_profiles")
       .select("id")
       .eq("user_id", userId)
@@ -109,7 +96,7 @@ export async function POST(request: NextRequest) {
     if (existingProfile) {
       // Update existing profile
       console.log("Updating existing profile with ID:", existingProfile.id);
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from("agent_profiles")
         .update({
           start_date: start_date || null,
@@ -135,7 +122,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Create new profile
       console.log("Creating new profile for user:", userId);
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from("agent_profiles")
         .insert({
           user_id: userId,

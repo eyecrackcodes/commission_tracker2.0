@@ -3,15 +3,19 @@
 import {
   useState,
   useEffect,
-  useCallback,
   forwardRef,
   useImperativeHandle,
+  useCallback,
 } from "react";
 import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
-import { format, differenceInMonths } from "date-fns";
+import { differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
-import { CSVLink } from "react-csv";
+import AddPolicyButton from "@/components/AddPolicyButton";
+
+export interface PolicyTableRef {
+  fetchPolicies: () => Promise<void>;
+}
 
 interface EditPolicyFormData {
   client: string;
@@ -55,12 +59,13 @@ interface AgentProfile {
   start_date: string | null;
 }
 
-const PolicyTable = forwardRef((props, ref) => {
+const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
+  const [policyToDelete, setPolicyToDelete] = useState<Policy | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({
     status: "all",
     dateRange: "all",
@@ -83,26 +88,41 @@ const PolicyTable = forwardRef((props, ref) => {
     fetchPolicies,
   }));
 
-  useEffect(() => {
-    if (user) {
-      fetchPolicies();
+  const fetchPolicies = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: supabaseError } = await supabase
+        .from("policies")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (supabaseError) {
+        throw supabaseError;
+      }
+
+      setPolicies(data || []);
+    } catch (err) {
+      console.error("Error fetching policies:", err);
+      setError(
+        "Failed to fetch policies. Please make sure your database is properly set up."
+      );
+    } finally {
+      setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    applyFilters();
-  }, [policies, filters, searchInput]);
+    if (user) {
+      fetchPolicies();
+    }
+  }, [user, fetchPolicies]);
 
-  // Debounced search effect
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setFilters((prev) => ({ ...prev, searchTerm: searchInput }));
-    }, 300); // 300ms delay
-
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     console.log("Starting filter application with:", {
       dateRange: filters.dateRange,
       status: filters.status,
@@ -282,7 +302,20 @@ const PolicyTable = forwardRef((props, ref) => {
     });
 
     setFilteredPolicies(result);
-  };
+  }, [filters, searchInput, policies]);
+
+  useEffect(() => {
+    applyFilters();
+  }, [applyFilters]);
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((prev) => ({ ...prev, searchTerm: searchInput }));
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Add a useEffect to reset custom date range when switching to other options
   useEffect(() => {
@@ -294,34 +327,6 @@ const PolicyTable = forwardRef((props, ref) => {
       }));
     }
   }, [filters.dateRange]);
-
-  const fetchPolicies = async () => {
-    if (!user) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data, error: supabaseError } = await supabase
-        .from("policies")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (supabaseError) {
-        throw supabaseError;
-      }
-
-      setPolicies(data || []);
-    } catch (err) {
-      console.error("Error fetching policies:", err);
-      setError(
-        "Failed to fetch policies. Please make sure your database is properly set up."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Fetch agent profile for tenure calculation
   useEffect(() => {
@@ -389,6 +394,7 @@ const PolicyTable = forwardRef((props, ref) => {
 
       if (error) throw error;
       setPolicies(policies.filter((policy) => policy.id !== id));
+      setPolicyToDelete(null); // Close the confirmation dialog
     } catch (err) {
       setError("Failed to delete policy");
       console.error("Error deleting policy:", err);
@@ -484,28 +490,6 @@ const PolicyTable = forwardRef((props, ref) => {
     },
   };
 
-  const handleSearch = () => {
-    setFilters((prev) => ({ ...prev, searchTerm: searchInput }));
-  };
-
-  const clearSearch = () => {
-    setSearchInput("");
-    setFilters((prev) => ({ ...prev, searchTerm: "" }));
-  };
-
-  const csvHeaders = [
-    { label: "Client", key: "client" },
-    { label: "Carrier", key: "carrier" },
-    { label: "Policy Number", key: "policy_number" },
-    { label: "Product", key: "product" },
-    { label: "Status", key: "policy_status" },
-    { label: "Premium", key: "commissionable_annual_premium" },
-    { label: "Commission Rate", key: "commission_rate" },
-    { label: "Commission", key: "commission_due" },
-    { label: "First Payment Date", key: "first_payment_date" },
-    { label: "Inforce Date", key: "inforce_date" },
-  ];
-
   const handleSort = (field: SortField) => {
     setSort((prev) => ({
       field,
@@ -537,7 +521,7 @@ const PolicyTable = forwardRef((props, ref) => {
   const sortedAndFilteredPolicies = sortPolicies(filteredPolicies);
 
   // Calculate total commission from filtered policies
-  const totalCommission = filteredPolicies.reduce(
+  const totalCommission = sortedAndFilteredPolicies.reduce(
     (sum, policy) => sum + policy.commission_due,
     0
   );
@@ -882,46 +866,7 @@ const PolicyTable = forwardRef((props, ref) => {
           Policies
         </h2>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-          <CSVLink
-            data={filteredPolicies}
-            headers={csvHeaders}
-            filename={`policies_${format(new Date(), "yyyy-MM-dd")}.csv`}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <svg
-              className="h-4 w-4 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-              />
-            </svg>
-            Export to CSV
-          </CSVLink>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <svg
-              className="h-4 w-4 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-              />
-            </svg>
-            Add Policy
-          </button>
+          <AddPolicyButton onPolicyAdded={fetchPolicies} />
         </div>
       </div>
 
@@ -1000,11 +945,11 @@ const PolicyTable = forwardRef((props, ref) => {
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("status")}
+                    onClick={() => handleSort("policy_status")}
                     className="flex items-center focus:outline-none"
                   >
                     Status
-                    {sort.field === "status" && (
+                    {sort.field === "policy_status" && (
                       <span className="ml-1">
                         {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
@@ -1016,11 +961,11 @@ const PolicyTable = forwardRef((props, ref) => {
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("premium")}
+                    onClick={() => handleSort("commissionable_annual_premium")}
                     className="flex items-center focus:outline-none"
                   >
                     Premium
-                    {sort.field === "premium" && (
+                    {sort.field === "commissionable_annual_premium" && (
                       <span className="ml-1">
                         {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
@@ -1032,11 +977,11 @@ const PolicyTable = forwardRef((props, ref) => {
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("commission")}
+                    onClick={() => handleSort("commission_due")}
                     className="flex items-center focus:outline-none"
                   >
                     Commission
-                    {sort.field === "commission" && (
+                    {sort.field === "commission_due" && (
                       <span className="ml-1">
                         {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
@@ -1062,7 +1007,7 @@ const PolicyTable = forwardRef((props, ref) => {
                   </td>
                 </tr>
               ) : (
-                filteredPolicies.map((policy) => (
+                sortedAndFilteredPolicies.map((policy) => (
                   <tr key={policy.id}>
                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                       {policy.client}
@@ -1105,7 +1050,7 @@ const PolicyTable = forwardRef((props, ref) => {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDelete(policy.id)}
+                          onClick={() => setPolicyToDelete(policy)}
                           className="text-red-600 hover:text-red-900"
                         >
                           Delete
@@ -1283,6 +1228,33 @@ const PolicyTable = forwardRef((props, ref) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {policyToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Confirm Deletion</h2>
+            <p className="mb-6">
+              Are you sure you want to delete the policy for{" "}
+              <span className="font-semibold">{policyToDelete.client}</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setPolicyToDelete(null)}
+                className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(policyToDelete.id)}
+                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

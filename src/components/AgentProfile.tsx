@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
-import { format } from "date-fns";
+import { differenceInMonths } from "date-fns";
 
 interface AgentProfile {
   id: number;
@@ -21,14 +21,27 @@ export default function AgentProfile() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
+  const calculateTenureMonths = useCallback(() => {
+    if (!profile?.start_date) return 0;
+    const startDate = new Date(profile.start_date);
+    const today = new Date();
+    return differenceInMonths(today, startDate);
+  }, [profile?.start_date]);
 
-  const fetchProfile = async () => {
+  const getTenureBasedCommissionRate = useCallback(
+    (baseRate: number) => {
+      const tenureMonths = calculateTenureMonths();
+      if (tenureMonths >= 24) return baseRate * 1.1; // 2+ years: 10% bonus
+      if (tenureMonths >= 12) return baseRate * 1.05; // 1+ year: 5% bonus
+      if (tenureMonths >= 6) return baseRate * 1.02; // 6+ months: 2% bonus
+      return baseRate; // Less than 6 months: base rate
+    },
+    [calculateTenureMonths]
+  );
+
+  const fetchProfile = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -40,7 +53,6 @@ export default function AgentProfile() {
       }
 
       const data = await response.json();
-      // Parse specializations if it's a string
       if (typeof data?.specializations === "string") {
         try {
           data.specializations = JSON.parse(data.specializations);
@@ -56,7 +68,13 @@ export default function AgentProfile() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user, fetchProfile]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -64,6 +82,7 @@ export default function AgentProfile() {
 
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     const formData = new FormData(e.currentTarget);
     const startDate = formData.get("start_date") as string;
@@ -71,20 +90,12 @@ export default function AgentProfile() {
     const specializationsInput = formData.get("specializations") as string;
     const notes = formData.get("notes") as string;
 
-    // Process specializations
     const specializations = specializationsInput
       ? specializationsInput
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean)
       : null;
-
-    console.log("Submitting profile data:", {
-      start_date: startDate || null,
-      license_number: licenseNumber || null,
-      specializations,
-      notes: notes || null,
-    });
 
     try {
       const response = await fetch("/api/agent-profile", {
@@ -100,17 +111,12 @@ export default function AgentProfile() {
         }),
       });
 
-      console.log("Response status:", response.status);
-
       const responseData = await response.json();
-      console.log("Response data:", responseData);
 
       if (!response.ok) {
-        console.error("Error response:", responseData);
         throw new Error(responseData.error || "Failed to save profile");
       }
 
-      // Parse specializations from the response data
       if (typeof responseData?.specializations === "string") {
         try {
           responseData.specializations = JSON.parse(
@@ -122,10 +128,15 @@ export default function AgentProfile() {
         }
       }
 
-      console.log("Profile saved successfully:", responseData);
       setProfile(responseData);
       setIsEditing(false);
       setError(null);
+      setSuccessMessage("Profile updated successfully!");
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+      }, 3000);
     } catch (err) {
       console.error("Error saving profile:", err);
       setError(
@@ -145,6 +156,11 @@ export default function AgentProfile() {
     );
   }
 
+  const tenureMonths = calculateTenureMonths();
+  const baseCommissionRate = 0.05; // 5% base rate
+  const adjustedCommissionRate =
+    getTenureBasedCommissionRate(baseCommissionRate);
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
       <div className="bg-white shadow overflow-hidden rounded-lg">
@@ -153,12 +169,32 @@ export default function AgentProfile() {
             Agent Profile
           </h2>
 
-          {isLoading ? (
-            <div className="flex justify-center items-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 md:h-10 md:w-10 border-b-2 border-blue-600"></div>
+          {successMessage && (
+            <div className="mb-4 bg-green-50 border-l-4 border-green-400 p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg
+                    className="h-5 w-5 text-green-400"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-green-700">{successMessage}</p>
+                </div>
+              </div>
             </div>
-          ) : error ? (
-            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          )}
+
+          {error ? (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
               <div className="flex">
                 <div className="flex-shrink-0">
                   <svg
@@ -197,6 +233,7 @@ export default function AgentProfile() {
                     name="start_date"
                     defaultValue={profile?.start_date || ""}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
                   />
                 </div>
 
@@ -213,6 +250,7 @@ export default function AgentProfile() {
                     name="license_number"
                     defaultValue={profile?.license_number || ""}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    required
                   />
                 </div>
               </div>
@@ -254,7 +292,7 @@ export default function AgentProfile() {
                 ></textarea>
               </div>
 
-              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+              <div className="flex justify-end space-x-3">
                 <button
                   type="submit"
                   className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -312,7 +350,52 @@ export default function AgentProfile() {
                 </p>
               </div>
 
-              <div className="pt-4 md:pt-6">
+              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-md">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg
+                      className="h-5 w-5 text-blue-400"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-blue-800">
+                      Commission Information
+                    </h3>
+                    <div className="mt-2 text-sm text-blue-700">
+                      <p>Tenure: {tenureMonths} months</p>
+                      <p>
+                        Base Commission Rate:{" "}
+                        {(baseCommissionRate * 100).toFixed(1)}%
+                      </p>
+                      <p>
+                        Adjusted Commission Rate:{" "}
+                        {(adjustedCommissionRate * 100).toFixed(1)}%
+                      </p>
+                      {tenureMonths >= 6 && (
+                        <p className="mt-1 text-xs">
+                          * Includes tenure bonus of{" "}
+                          {tenureMonths >= 24
+                            ? "10%"
+                            : tenureMonths >= 12
+                            ? "5%"
+                            : "2%"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
                 <button
                   onClick={() => setIsEditing(true)}
                   className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
