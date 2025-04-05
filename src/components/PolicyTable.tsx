@@ -74,10 +74,6 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     searchTerm: "",
   });
   const [searchInput, setSearchInput] = useState("");
-  const [sort, setSort] = useState<SortState>({
-    field: "client",
-    direction: "asc",
-  });
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [sortField, setSortField] = useState<keyof Policy>("created_at");
