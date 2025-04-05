@@ -66,7 +66,6 @@ export async function sendPolicyNotification(policy: {
 }
 
 export async function sendCommissionRateChangeNotification(
-  userId: string,
   oldRate: number,
   newRate: number
 ) {

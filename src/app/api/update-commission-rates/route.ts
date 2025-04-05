@@ -50,11 +50,7 @@ export async function GET() {
         }
 
         // Send Slack notification
-        await sendCommissionRateChangeNotification(
-          profile.user_id,
-          0.05,
-          newRate
-        );
+        await sendCommissionRateChangeNotification(0.05, newRate);
 
         updates.push({
           userId: profile.user_id,
