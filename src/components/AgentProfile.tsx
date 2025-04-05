@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
-import { format } from "date-fns";
+import { supabase } from "@/lib/supabase";
 
 interface AgentProfile {
   id: number;
@@ -26,7 +26,7 @@ export default function AgentProfile() {
     if (user) {
       fetchProfile();
     }
-  }, [user]);
+  }, [user, fetchProfile]);
 
   const fetchProfile = async () => {
     if (!user) return;

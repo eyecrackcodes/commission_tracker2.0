@@ -26,14 +26,9 @@ interface AddPolicyButtonProps {
 export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const { register, handleSubmit, reset } = useForm<PolicyFormData>();
   const { user } = useUser();
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<PolicyFormData>();
 
   const onSubmit = async (data: PolicyFormData) => {
     if (!user) return;
@@ -53,7 +48,7 @@ export default function AddPolicyButton({
         throw error;
       }
 
-      setIsOpen(false);
+      setShowModal(false);
       reset();
       if (onPolicyAdded) {
         onPolicyAdded();
@@ -66,13 +61,13 @@ export default function AddPolicyButton({
   return (
     <>
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => setShowModal(true)}
         className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
       >
         Add Policy
       </button>
 
-      {isOpen && (
+      {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-8 rounded-lg w-full max-w-2xl">
             <h2 className="text-2xl font-bold mb-4">Add New Policy</h2>
@@ -196,7 +191,7 @@ export default function AddPolicyButton({
               <div className="flex justify-end space-x-4">
                 <button
                   type="button"
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => setShowModal(false)}
                   className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
                 >
                   Cancel

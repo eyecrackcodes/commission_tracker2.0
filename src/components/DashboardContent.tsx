@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import PolicyTable from "@/components/PolicyTable";
+import PolicyTable, { PolicyTableRef } from "@/components/PolicyTable";
 import AddPolicyButton from "@/components/AddPolicyButton";
 import AgentProfile from "@/components/AgentProfile";
 
 export default function DashboardContent() {
-  const policyTableRef = useRef<{ fetchPolicies: () => void }>();
+  const policyTableRef = useRef<PolicyTableRef>(null);
   const [activeTab, setActiveTab] = useState<"policies" | "profile">(
     "policies"
   );

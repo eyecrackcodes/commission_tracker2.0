@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  forwardRef,
-  useImperativeHandle,
-} from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
-import { format, differenceInMonths } from "date-fns";
+import { differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
 
 export interface PolicyTableRef {
@@ -64,7 +58,6 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     status: "all",
     dateRange: "all",
@@ -91,11 +84,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     if (user) {
       fetchPolicies();
     }
-  }, [user]);
+  }, [user, fetchPolicies]);
 
   useEffect(() => {
     applyFilters();
-  }, [policies, filters, searchInput]);
+  }, [policies, filters, searchInput, applyFilters]);
 
   // Debounced search effect
   useEffect(() => {
