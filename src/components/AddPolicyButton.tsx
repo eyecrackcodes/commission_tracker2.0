@@ -19,7 +19,13 @@ interface PolicyFormData {
   comments: string;
 }
 
-export default function AddPolicyButton() {
+interface AddPolicyButtonProps {
+  onPolicyAdded?: () => void;
+}
+
+export default function AddPolicyButton({
+  onPolicyAdded,
+}: AddPolicyButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
   const {
@@ -49,7 +55,9 @@ export default function AddPolicyButton() {
 
       setIsOpen(false);
       reset();
-      window.location.reload();
+      if (onPolicyAdded) {
+        onPolicyAdded();
+      }
     } catch (err) {
       console.error("Error adding policy:", err);
     }
