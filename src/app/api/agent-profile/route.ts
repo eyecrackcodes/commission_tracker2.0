@@ -14,56 +14,23 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
 // GET handler to fetch the agent profile
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { userId } = auth();
-
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    console.log("Fetching profile for user:", userId);
-
-    const { data, error } = await supabaseClient
+    const { data: profiles, error } = await supabaseClient
       .from("agent_profiles")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
+      .select("*");
 
     if (error) {
-      console.error("Error fetching profile:", error);
+      console.error("Error fetching profiles:", error);
       return NextResponse.json(
         { error: error.message },
         { status: error.code === "PGRST116" ? 404 : 500 }
       );
     }
 
-    if (!data) {
-      // If no profile exists, return a default structure
-      return NextResponse.json({
-        user_id: userId,
-        start_date: null,
-        license_number: null,
-        specializations: [],
-        notes: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    // Parse specializations if they exist
-    if (typeof data.specializations === "string") {
-      try {
-        data.specializations = JSON.parse(data.specializations);
-      } catch (e) {
-        console.error("Error parsing specializations:", e);
-        data.specializations = [];
-      }
-    }
-
-    return NextResponse.json(data);
+    return NextResponse.json(profiles);
   } catch (err) {
-    console.error("Error fetching agent profile:", err);
+    console.error("Error fetching agent profiles:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal Server Error" },
       { status: 500 }

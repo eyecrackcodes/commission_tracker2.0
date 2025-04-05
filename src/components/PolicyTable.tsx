@@ -79,6 +79,8 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     direction: "asc",
   });
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<keyof Policy>("created_at");
 
   const { user } = useUser();
   const { register, handleSubmit, reset, setValue } =
@@ -394,25 +396,6 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     return differenceInMonths(today, startDate);
   };
 
-  const getTenureBasedCommissionRate = (baseRate: number) => {
-    const tenureMonths = calculateTenureMonths();
-
-    // Apply tenure-based commission rate adjustments
-    if (tenureMonths >= 24) {
-      // 2+ years: 10% bonus
-      return baseRate * 1.1;
-    } else if (tenureMonths >= 12) {
-      // 1+ year: 5% bonus
-      return baseRate * 1.05;
-    } else if (tenureMonths >= 6) {
-      // 6+ months: 2% bonus
-      return baseRate * 1.02;
-    }
-
-    // Less than 6 months: base rate
-    return baseRate;
-  };
-
   const handleDelete = async (id: number) => {
     if (!user) return;
 
@@ -524,31 +507,26 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     },
   };
 
-  const handleSort = (field: SortField) => {
-    setSort((prev) => ({
-      field,
-      direction:
-        prev.field === field && prev.direction === "asc" ? "desc" : "asc",
-    }));
+  const handleSort = (field: keyof Policy) => {
+    if (field === sortField) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
   };
 
   const sortPolicies = (policies: Policy[]) => {
     return [...policies].sort((a, b) => {
-      const aValue = a[sort.field];
-      const bValue = b[sort.field];
+      const aValue = a[sortField];
+      const bValue = b[sortField];
 
-      if (typeof aValue === "number" && typeof bValue === "number") {
-        return sort.direction === "asc" ? aValue - bValue : bValue - aValue;
-      }
+      if (aValue === null) return sortDirection === "asc" ? -1 : 1;
+      if (bValue === null) return sortDirection === "asc" ? 1 : -1;
 
-      const aString = String(aValue).toLowerCase();
-      const bString = String(bValue).toLowerCase();
-
-      if (sort.direction === "asc") {
-        return aString.localeCompare(bString);
-      } else {
-        return bString.localeCompare(aString);
-      }
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+      return 0;
     });
   };
 
@@ -919,9 +897,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Client
-                    {sort.field === "client" && (
+                    {sortField === "client" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>
@@ -935,9 +913,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Carrier
-                    {sort.field === "carrier" && (
+                    {sortField === "carrier" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>
@@ -951,9 +929,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Policy #
-                    {sort.field === "policy_number" && (
+                    {sortField === "policy_number" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>
@@ -967,9 +945,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Product
-                    {sort.field === "product" && (
+                    {sortField === "product" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>
@@ -983,9 +961,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Status
-                    {sort.field === "policy_status" && (
+                    {sortField === "policy_status" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>
@@ -999,9 +977,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Premium
-                    {sort.field === "commissionable_annual_premium" && (
+                    {sortField === "commissionable_annual_premium" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>
@@ -1015,9 +993,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
                     className="flex items-center focus:outline-none"
                   >
                     Commission
-                    {sort.field === "commission_due" && (
+                    {sortField === "commission_due" && (
                       <span className="ml-1">
-                        {sort.direction === "asc" ? "↑" : "↓"}
+                        {sortDirection === "asc" ? "↑" : "↓"}
                       </span>
                     )}
                   </button>

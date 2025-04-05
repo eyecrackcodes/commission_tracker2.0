@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { supabase, Policy } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
@@ -29,6 +29,16 @@ interface AgentProfile {
   start_date: string | null;
 }
 
+interface ConfettiOptions {
+  origin: { y: number; x?: number };
+  zIndex?: number;
+  particleCount?: number;
+  spread?: number;
+  startVelocity?: number;
+  decay?: number;
+  scalar?: number;
+}
+
 export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
@@ -46,12 +56,13 @@ export default function AddPolicyButton({
           .from("agent_profiles")
           .select("start_date")
           .eq("user_id", user.id)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
-        setAgentProfile(data);
+        setAgentProfile(data || { start_date: null });
       } catch (err) {
         console.error("Error fetching agent profile:", err);
+        setAgentProfile({ start_date: null });
       }
     };
 
@@ -60,12 +71,12 @@ export default function AddPolicyButton({
 
   const triggerConfetti = () => {
     const count = 200;
-    const defaults = {
+    const defaults: ConfettiOptions = {
       origin: { y: 0.7 },
       zIndex: 999,
     };
 
-    function fire(particleRatio: number, opts: any) {
+    function fire(particleRatio: number, opts: Partial<ConfettiOptions>) {
       confetti({
         ...defaults,
         ...opts,
@@ -76,19 +87,19 @@ export default function AddPolicyButton({
     fire(0.25, {
       spread: 26,
       startVelocity: 55,
-      origin: { x: 0.2 },
+      origin: { x: 0.2, y: 0.7 },
     });
 
     fire(0.2, {
       spread: 60,
-      origin: { x: 0.5 },
+      origin: { x: 0.5, y: 0.7 },
     });
 
     fire(0.35, {
       spread: 100,
       decay: 0.91,
       scalar: 0.8,
-      origin: { x: 0.8 },
+      origin: { x: 0.8, y: 0.7 },
     });
 
     fire(0.1, {
@@ -96,13 +107,13 @@ export default function AddPolicyButton({
       startVelocity: 25,
       decay: 0.92,
       scalar: 1.2,
-      origin: { x: 0.5 },
+      origin: { x: 0.5, y: 0.7 },
     });
 
     fire(0.1, {
       spread: 120,
       startVelocity: 45,
-      origin: { x: 0.5 },
+      origin: { x: 0.5, y: 0.7 },
     });
   };
 
