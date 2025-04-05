@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@clerk/clerk-sdk-node": "^4.13.23",
     "@clerk/nextjs": "^4.29.9",
     "@slack/web-api": "^7.9.1",
     "@supabase/supabase-js": "^2.39.8",
