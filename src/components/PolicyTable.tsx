@@ -5,6 +5,7 @@ import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
+import { CSVLink } from "react-csv";
 
 interface EditPolicyFormData {
   client: string;
@@ -29,6 +30,21 @@ interface FilterOptions {
   searchTerm: string;
 }
 
+type SortField =
+  | "client"
+  | "carrier"
+  | "policy_number"
+  | "product"
+  | "policy_status"
+  | "commissionable_annual_premium"
+  | "commission_due";
+type SortDirection = "asc" | "desc";
+
+interface SortState {
+  field: SortField;
+  direction: SortDirection;
+}
+
 export default function PolicyTable() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
@@ -43,6 +59,10 @@ export default function PolicyTable() {
     searchTerm: "",
   });
   const [searchInput, setSearchInput] = useState("");
+  const [sort, setSort] = useState<SortState>({
+    field: "client",
+    direction: "asc",
+  });
 
   const { user } = useUser();
   const { register, handleSubmit, reset, setValue } =
@@ -399,6 +419,49 @@ export default function PolicyTable() {
     setFilters((prev) => ({ ...prev, searchTerm: "" }));
   };
 
+  const csvHeaders = [
+    { label: "Client", key: "client" },
+    { label: "Carrier", key: "carrier" },
+    { label: "Policy Number", key: "policy_number" },
+    { label: "Product", key: "product" },
+    { label: "Status", key: "policy_status" },
+    { label: "Premium", key: "commissionable_annual_premium" },
+    { label: "Commission Rate", key: "commission_rate" },
+    { label: "Commission", key: "commission_due" },
+    { label: "First Payment Date", key: "first_payment_date" },
+    { label: "Inforce Date", key: "inforce_date" },
+  ];
+
+  const handleSort = (field: SortField) => {
+    setSort((prev) => ({
+      field,
+      direction:
+        prev.field === field && prev.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const sortPolicies = (policies: Policy[]) => {
+    return [...policies].sort((a, b) => {
+      const aValue = a[sort.field];
+      const bValue = b[sort.field];
+
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sort.direction === "asc" ? aValue - bValue : bValue - aValue;
+      }
+
+      const aString = String(aValue).toLowerCase();
+      const bString = String(bValue).toLowerCase();
+
+      if (sort.direction === "asc") {
+        return aString.localeCompare(bString);
+      } else {
+        return bString.localeCompare(aString);
+      }
+    });
+  };
+
+  const sortedAndFilteredPolicies = sortPolicies(filteredPolicies);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -729,41 +792,88 @@ export default function PolicyTable() {
         </div>
       </div>
 
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">
+          Commission Dashboard
+        </h1>
+        <div className="space-x-4">
+          <CSVLink
+            data={filteredPolicies}
+            headers={csvHeaders}
+            filename={`commission-report-${
+              new Date().toISOString().split("T")[0]
+            }.csv`}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+          >
+            <svg
+              className="mr-2 h-5 w-5 text-gray-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            Export to CSV
+          </CSVLink>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+          >
+            Add Policy
+          </button>
+        </div>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white shadow-md rounded-lg">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Client
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Carrier
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Policy #
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Product
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Premium
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Rate
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Commission
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
+              {[
+                { label: "CLIENT", field: "client" },
+                { label: "CARRIER", field: "carrier" },
+                { label: "POLICY #", field: "policy_number" },
+                { label: "PRODUCT", field: "product" },
+                { label: "STATUS", field: "policy_status" },
+                { label: "PREMIUM", field: "commissionable_annual_premium" },
+                { label: "RATE", field: "commission_rate" },
+                { label: "COMMISSION", field: "commission_due" },
+                { label: "ACTIONS", field: null },
+              ].map((column) => (
+                <th
+                  key={column.label}
+                  scope="col"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  {column.field ? (
+                    <button
+                      className="group inline-flex items-center space-x-1"
+                      onClick={() =>
+                        column.field && handleSort(column.field as SortField)
+                      }
+                    >
+                      <span>{column.label}</span>
+                      <span className="ml-2 flex-none rounded text-gray-400">
+                        {sort.field === column.field
+                          ? sort.direction === "desc"
+                            ? "↓"
+                            : "↑"
+                          : "↕"}
+                      </span>
+                    </button>
+                  ) : (
+                    column.label
+                  )}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {filteredPolicies.map((policy) => (
+            {sortedAndFilteredPolicies.map((policy) => (
               <tr key={policy.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">{policy.client}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
