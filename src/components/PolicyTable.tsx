@@ -50,11 +50,6 @@ type SortField =
   | "commission_due";
 type SortDirection = "asc" | "desc";
 
-interface SortState {
-  field: SortField;
-  direction: SortDirection;
-}
-
 interface AgentProfile {
   start_date: string | null;
 }
