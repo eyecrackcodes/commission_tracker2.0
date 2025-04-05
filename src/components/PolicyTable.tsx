@@ -9,7 +9,7 @@ import {
 } from "react";
 import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
-import { format } from "date-fns";
+import { format, differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
 import { CSVLink } from "react-csv";
 
@@ -51,6 +51,10 @@ interface SortState {
   direction: SortDirection;
 }
 
+interface AgentProfile {
+  start_date: string | null;
+}
+
 const PolicyTable = forwardRef((props, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
@@ -69,6 +73,7 @@ const PolicyTable = forwardRef((props, ref) => {
     field: "client",
     direction: "asc",
   });
+  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
 
   const { user } = useUser();
   const { register, handleSubmit, reset, setValue } =
@@ -116,7 +121,8 @@ const PolicyTable = forwardRef((props, ref) => {
     // Apply status filter
     if (filters.status !== "all") {
       result = result.filter(
-        (policy) => policy.policy_status === filters.status
+        (policy) =>
+          policy.policy_status.toLowerCase() === filters.status.toLowerCase()
       );
       console.log("After status filter count:", result.length);
     }
@@ -317,6 +323,60 @@ const PolicyTable = forwardRef((props, ref) => {
     }
   };
 
+  // Fetch agent profile for tenure calculation
+  useEffect(() => {
+    const fetchAgentProfile = async () => {
+      try {
+        console.log("Fetching agent profile...");
+        const response = await fetch("/api/agent-profile");
+
+        console.log("Agent profile response status:", response.status);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Failed to fetch agent profile:", errorData);
+          return;
+        }
+
+        const data = await response.json();
+        console.log("Agent profile fetched successfully:", data);
+        setAgentProfile(data);
+      } catch (error) {
+        console.error("Error fetching agent profile:", error);
+      }
+    };
+
+    fetchAgentProfile();
+  }, []);
+
+  const calculateTenureMonths = () => {
+    if (!agentProfile?.start_date) return 0;
+
+    const startDate = new Date(agentProfile.start_date);
+    const today = new Date();
+
+    return differenceInMonths(today, startDate);
+  };
+
+  const getTenureBasedCommissionRate = (baseRate: number) => {
+    const tenureMonths = calculateTenureMonths();
+
+    // Apply tenure-based commission rate adjustments
+    if (tenureMonths >= 24) {
+      // 2+ years: 10% bonus
+      return baseRate * 1.1;
+    } else if (tenureMonths >= 12) {
+      // 1+ year: 5% bonus
+      return baseRate * 1.05;
+    } else if (tenureMonths >= 6) {
+      // 6+ months: 2% bonus
+      return baseRate * 1.02;
+    }
+
+    // Less than 6 months: base rate
+    return baseRate;
+  };
+
   const handleDelete = async (id: number) => {
     if (!user) return;
 
@@ -360,9 +420,13 @@ const PolicyTable = forwardRef((props, ref) => {
 
     try {
       // Convert empty date strings to null
+      const baseCommissionRate = data.commission_rate / 100;
+      const tenureAdjustedRate =
+        getTenureBasedCommissionRate(baseCommissionRate);
+
       const formattedData = {
         ...data,
-        commission_rate: data.commission_rate / 100,
+        commission_rate: tenureAdjustedRate,
         first_payment_date: data.first_payment_date || null,
         inforce_date: data.inforce_date || null,
         date_commission_paid: data.date_commission_paid || null,
@@ -472,6 +536,12 @@ const PolicyTable = forwardRef((props, ref) => {
 
   const sortedAndFilteredPolicies = sortPolicies(filteredPolicies);
 
+  // Calculate total commission from filtered policies
+  const totalCommission = filteredPolicies.reduce(
+    (sum, policy) => sum + policy.commission_due,
+    0
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -533,12 +603,13 @@ const PolicyTable = forwardRef((props, ref) => {
   return (
     <>
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow p-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
+        {/* Active Policies Card */}
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-green-100">
+            <div className="p-2 md:p-3 rounded-full bg-green-100">
               <svg
-                className="h-8 w-8 text-green-600"
+                className="h-6 w-6 md:h-8 md:w-8 text-green-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -551,42 +622,32 @@ const PolicyTable = forwardRef((props, ref) => {
                 />
               </svg>
             </div>
-            <div className="ml-4">
-              <h2 className="text-lg font-semibold text-gray-700">
+            <div className="ml-3 md:ml-4">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
                 Active Policies
               </h2>
-              <div className="mt-2">
-                <p className="text-3xl font-bold text-gray-900">
+              <div className="mt-1 md:mt-2">
+                <p className="text-xl md:text-3xl font-bold text-gray-900">
                   {summaryStats.active.count}
                 </p>
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm text-gray-600">
-                    Premium: ${summaryStats.active.premium.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Commission: $
-                    {summaryStats.active.commission.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Avg. Rate:{" "}
-                    {(
-                      (summaryStats.active.commission /
-                        summaryStats.active.premium) *
-                      100
-                    ).toFixed(1)}
-                    %
-                  </p>
-                </div>
+                <p className="text-xs md:text-sm text-gray-600">
+                  ${summaryStats.active.premium.toLocaleString()} in premiums
+                </p>
+                <p className="text-xs md:text-sm text-gray-600">
+                  ${summaryStats.active.commission.toLocaleString()} in
+                  commissions
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        {/* Pending Policies Card */}
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-yellow-100">
+            <div className="p-2 md:p-3 rounded-full bg-yellow-100">
               <svg
-                className="h-8 w-8 text-yellow-600"
+                className="h-6 w-6 md:h-8 md:w-8 text-yellow-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -599,42 +660,32 @@ const PolicyTable = forwardRef((props, ref) => {
                 />
               </svg>
             </div>
-            <div className="ml-4">
-              <h2 className="text-lg font-semibold text-gray-700">
+            <div className="ml-3 md:ml-4">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
                 Pending Policies
               </h2>
-              <div className="mt-2">
-                <p className="text-3xl font-bold text-gray-900">
+              <div className="mt-1 md:mt-2">
+                <p className="text-xl md:text-3xl font-bold text-gray-900">
                   {summaryStats.pending.count}
                 </p>
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm text-gray-600">
-                    Premium: ${summaryStats.pending.premium.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Commission: $
-                    {summaryStats.pending.commission.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Avg. Rate:{" "}
-                    {(
-                      (summaryStats.pending.commission /
-                        summaryStats.pending.premium) *
-                      100
-                    ).toFixed(1)}
-                    %
-                  </p>
-                </div>
+                <p className="text-xs md:text-sm text-gray-600">
+                  ${summaryStats.pending.premium.toLocaleString()} in premiums
+                </p>
+                <p className="text-xs md:text-sm text-gray-600">
+                  ${summaryStats.pending.commission.toLocaleString()} in
+                  commissions
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
+        {/* Cancelled Policies Card */}
+        <div className="bg-white rounded-lg shadow p-4 md:p-6">
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-red-100">
+            <div className="p-2 md:p-3 rounded-full bg-red-100">
               <svg
-                className="h-8 w-8 text-red-600"
+                className="h-6 w-6 md:h-8 md:w-8 text-red-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -643,57 +694,84 @@ const PolicyTable = forwardRef((props, ref) => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
+                  d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
             </div>
-            <div className="ml-4">
-              <h2 className="text-lg font-semibold text-gray-700">
+            <div className="ml-3 md:ml-4">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
                 Cancelled Policies
               </h2>
-              <div className="mt-2">
-                <p className="text-3xl font-bold text-gray-900">
+              <div className="mt-1 md:mt-2">
+                <p className="text-xl md:text-3xl font-bold text-gray-900">
                   {summaryStats.cancelled.count}
                 </p>
-                <div className="mt-2 space-y-1">
-                  <p className="text-sm text-gray-600">
-                    Premium: ${summaryStats.cancelled.premium.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Commission: $
-                    {summaryStats.cancelled.commission.toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Avg. Rate:{" "}
-                    {(
-                      (summaryStats.cancelled.commission /
-                        summaryStats.cancelled.premium) *
-                      100
-                    ).toFixed(1)}
-                    %
-                  </p>
-                </div>
+                <p className="text-xs md:text-sm text-gray-600">
+                  ${summaryStats.cancelled.premium.toLocaleString()} in premiums
+                </p>
+                <p className="text-xs md:text-sm text-gray-600">
+                  ${summaryStats.cancelled.commission.toLocaleString()} in
+                  commissions
+                </p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Tenure Info Card */}
+      {agentProfile?.start_date && (
+        <div className="bg-white rounded-lg shadow p-4 md:p-6 mb-6 md:mb-8">
+          <div className="flex items-center">
+            <div className="p-2 md:p-3 rounded-full bg-blue-100">
+              <svg
+                className="h-6 w-6 md:h-8 md:w-8 text-blue-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </div>
+            <div className="ml-3 md:ml-4">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
+                Agent Tenure
+              </h2>
+              <p className="text-xl md:text-3xl font-bold text-gray-900">
+                {calculateTenureMonths()} months
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="bg-white rounded-lg shadow p-4 md:p-6 mb-6">
+        <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4">
+          Filters
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="status"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Status
             </label>
             <select
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              id="status"
               value={filters.status}
               onChange={(e) =>
                 setFilters({ ...filters, status: e.target.value })
               }
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             >
-              <option value="all">All Statuses</option>
+              <option value="all">All</option>
               <option value="Active">Active</option>
               <option value="Pending">Pending</option>
               <option value="Cancelled">Cancelled</option>
@@ -701,20 +779,24 @@ const PolicyTable = forwardRef((props, ref) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="dateRange"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Date Range
             </label>
             <select
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              id="dateRange"
               value={filters.dateRange}
               onChange={(e) =>
                 setFilters({ ...filters, dateRange: e.target.value })
               }
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             >
               <option value="all">All Time</option>
-              <option value="month">Last Month</option>
-              <option value="quarter">Last Quarter</option>
-              <option value="year">Last Year</option>
+              <option value="month">Month</option>
+              <option value="quarter">Quarter</option>
+              <option value="year">Year</option>
               <option value="custom">Custom Range</option>
             </select>
           </div>
@@ -722,63 +804,64 @@ const PolicyTable = forwardRef((props, ref) => {
           {filters.dateRange === "custom" && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="startDate"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Start Date
                 </label>
                 <input
                   type="date"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  id="startDate"
                   value={filters.startDate}
                   onChange={(e) =>
                     setFilters({ ...filters, startDate: e.target.value })
                   }
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="endDate"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   End Date
                 </label>
                 <input
                   type="date"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  id="endDate"
                   value={filters.endDate}
                   onChange={(e) =>
                     setFilters({ ...filters, endDate: e.target.value })
                   }
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
             </>
           )}
 
-          <div
-            className={filters.dateRange === "custom" ? "md:col-span-4" : ""}
-          >
-            <label className="block text-sm font-medium text-gray-700">
+          <div>
+            <label
+              htmlFor="search"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Search
             </label>
-            <div className="mt-1 flex rounded-md shadow-sm">
+            <div className="relative">
               <input
                 type="text"
-                className="flex-1 rounded-l-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                placeholder="Search policies..."
+                id="search"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    handleSearch();
-                  }
-                }}
+                placeholder="Search policies..."
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               />
-              <button
-                type="button"
-                onClick={handleSearch}
-                className="inline-flex items-center px-4 py-2 border border-l-0 border-gray-300 text-sm font-medium rounded-r-md text-gray-700 bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              >
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                 <svg
-                  className="h-4 w-4 text-gray-400"
+                  className="h-5 w-5 text-gray-400"
                   fill="none"
-                  stroke="currentColor"
                   viewBox="0 0 24 24"
+                  stroke="currentColor"
                 >
                   <path
                     strokeLinecap="round"
@@ -787,182 +870,266 @@ const PolicyTable = forwardRef((props, ref) => {
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                   />
                 </svg>
-              </button>
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={clearSearch}
-                  className="ml-2 inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  Clear
-                </button>
-              )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Commission Dashboard
-        </h1>
-        <div className="space-x-4">
+      {/* Table Actions */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 md:mb-6">
+        <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
+          Policies
+        </h2>
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
           <CSVLink
             data={filteredPolicies}
             headers={csvHeaders}
-            filename={`commission-report-${
-              new Date().toISOString().split("T")[0]
-            }.csv`}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            filename={`policies_${format(new Date(), "yyyy-MM-dd")}.csv`}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <svg
-              className="mr-2 h-5 w-5 text-gray-500"
+              className="h-4 w-4 mr-2"
               fill="none"
-              stroke="currentColor"
               viewBox="0 0 24 24"
+              stroke="currentColor"
             >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
               />
             </svg>
             Export to CSV
           </CSVLink>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <svg
+              className="h-4 w-4 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+              />
+            </svg>
+            Add Policy
+          </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white shadow-md rounded-lg">
-          <thead className="bg-gray-50">
-            <tr>
-              {[
-                { label: "CLIENT", field: "client" },
-                { label: "CARRIER", field: "carrier" },
-                { label: "POLICY #", field: "policy_number" },
-                { label: "PRODUCT", field: "product" },
-                { label: "STATUS", field: "policy_status" },
-                { label: "PREMIUM", field: "commissionable_annual_premium" },
-                { label: "RATE", field: "commission_rate" },
-                { label: "COMMISSION", field: "commission_due" },
-                { label: "ACTIONS", field: null },
-              ].map((column) => (
+      {/* Table */}
+      <div className="bg-white shadow overflow-hidden rounded-lg">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
                 <th
-                  key={column.label}
                   scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
-                  {column.field ? (
-                    <button
-                      className="group inline-flex items-center space-x-1"
-                      onClick={() =>
-                        column.field && handleSort(column.field as SortField)
-                      }
-                    >
-                      <span>{column.label}</span>
-                      <span className="ml-2 flex-none rounded text-gray-400">
-                        {sort.field === column.field
-                          ? sort.direction === "desc"
-                            ? "↓"
-                            : "↑"
-                          : "↕"}
+                  <button
+                    onClick={() => handleSort("client")}
+                    className="flex items-center focus:outline-none"
+                  >
+                    Client
+                    {sort.field === "client" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
-                    </button>
-                  ) : (
-                    column.label
-                  )}
+                    )}
+                  </button>
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sortedAndFilteredPolicies.map((policy) => (
-              <tr key={policy.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">{policy.client}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {policy.carrier}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {policy.policy_number}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {policy.product}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      policy.policy_status === "Active"
-                        ? "bg-green-100 text-green-800"
-                        : policy.policy_status === "Pending"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {policy.policy_status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  ${policy.commissionable_annual_premium.toLocaleString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {(policy.commission_rate * 100).toFixed(0)}%
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  ${policy.commission_due.toLocaleString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
                   <button
-                    onClick={() => handleEdit(policy)}
-                    className="text-blue-600 hover:text-blue-900"
+                    onClick={() => handleSort("carrier")}
+                    className="flex items-center focus:outline-none"
                   >
-                    Edit
+                    Carrier
+                    {sort.field === "carrier" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
                   </button>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
                   <button
-                    onClick={() => handleDelete(policy.id)}
-                    className="text-red-600 hover:text-red-900"
+                    onClick={() => handleSort("policy_number")}
+                    className="flex items-center focus:outline-none"
                   >
-                    Delete
+                    Policy #
+                    {sort.field === "policy_number" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
                   </button>
-                </td>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  <button
+                    onClick={() => handleSort("product")}
+                    className="flex items-center focus:outline-none"
+                  >
+                    Product
+                    {sort.field === "product" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  <button
+                    onClick={() => handleSort("status")}
+                    className="flex items-center focus:outline-none"
+                  >
+                    Status
+                    {sort.field === "status" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  <button
+                    onClick={() => handleSort("premium")}
+                    className="flex items-center focus:outline-none"
+                  >
+                    Premium
+                    {sort.field === "premium" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  <button
+                    onClick={() => handleSort("commission")}
+                    className="flex items-center focus:outline-none"
+                  >
+                    Commission
+                    {sort.field === "commission" && (
+                      <span className="ml-1">
+                        {sort.direction === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </button>
+                </th>
+                <th
+                  scope="col"
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  Actions
+                </th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot className="bg-gray-50">
-            <tr>
-              <td colSpan={7} className="px-6 py-4 text-right font-bold">
-                Total Commission:
-              </td>
-              <td className="px-6 py-4 font-bold">
-                <div className="space-y-1">
-                  <p>
-                    $
-                    {filteredPolicies
-                      .reduce((sum, policy) => sum + policy.commission_due, 0)
-                      .toLocaleString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Avg. Rate:{" "}
-                    {(
-                      (filteredPolicies.reduce(
-                        (sum, policy) => sum + policy.commission_due,
-                        0
-                      ) /
-                        filteredPolicies.reduce(
-                          (sum, policy) =>
-                            sum + policy.commissionable_annual_premium,
-                          0
-                        )) *
-                      100
-                    ).toFixed(1)}
-                    %
-                  </p>
-                </div>
-              </td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredPolicies.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-4 text-center text-sm text-gray-500"
+                  >
+                    No policies found. Try adjusting your filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredPolicies.map((policy) => (
+                  <tr key={policy.id}>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {policy.client}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {policy.carrier}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {policy.policy_number}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {policy.product}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          policy.policy_status === "Active"
+                            ? "bg-green-100 text-green-800"
+                            : policy.policy_status === "Pending"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {policy.policy_status.charAt(0).toUpperCase() +
+                          policy.policy_status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ${policy.commissionable_annual_premium.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                      ${policy.commission_due.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handleEdit(policy)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(policy.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Total Commission */}
+      <div className="mt-6 md:mt-8 bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2 sm:mb-0">
+            Total Commission
+          </h2>
+          <p className="text-2xl md:text-3xl font-bold text-blue-600">
+            ${totalCommission.toLocaleString()}
+          </p>
+        </div>
       </div>
 
       {/* Edit Policy Modal */}
