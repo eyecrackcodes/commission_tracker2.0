@@ -456,18 +456,21 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     if (!user || !editingPolicy) return;
 
     try {
-      // Convert empty date strings to null
-      const baseCommissionRate = data.commission_rate / 100;
-      const tenureAdjustedRate =
-        getTenureBasedCommissionRate(baseCommissionRate);
+      setError(null);
 
+      // Format the data for update
       const formattedData = {
         ...data,
-        commission_rate: tenureAdjustedRate,
+        commission_rate: data.commission_rate / 100, // Convert percentage to decimal
         first_payment_date: data.first_payment_date || null,
         inforce_date: data.inforce_date || null,
         date_commission_paid: data.date_commission_paid || null,
+        commissionable_annual_premium: Number(
+          data.commissionable_annual_premium
+        ),
       };
+
+      console.log("Updating policy with data:", formattedData);
 
       const { error } = await supabase
         .from("policies")
@@ -477,7 +480,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
 
       if (error) {
         console.error("Supabase error:", error);
-        throw error;
+        throw new Error(error.message);
       }
 
       // Refresh policies
@@ -486,7 +489,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
       reset();
     } catch (err) {
       console.error("Error updating policy:", err);
-      setError("Failed to update policy");
+      setError(err instanceof Error ? err.message : "Failed to update policy");
     }
   };
 
@@ -1270,7 +1273,8 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
             <h2 className="text-xl font-bold mb-4">Confirm Deletion</h2>
             <p className="mb-6">
               Are you sure you want to delete the policy for{" "}
-              <span className="font-semibold">{policyToDelete.client}</span>? This action cannot be undone.
+              <span className="font-semibold">{policyToDelete.client}</span>?
+              This action cannot be undone.
             </p>
             <div className="flex justify-end space-x-4">
               <button

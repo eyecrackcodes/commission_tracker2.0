@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs";
 import { createClient } from "@supabase/supabase-js";
-
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,13 +14,15 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
 // GET handler to fetch the agent profile
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = auth();
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    console.log("Fetching profile for user:", userId);
 
     const { data, error } = await supabaseClient
       .from("agent_profiles")
@@ -29,7 +32,33 @@ export async function GET() {
 
     if (error) {
       console.error("Error fetching profile:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.code === "PGRST116" ? 404 : 500 }
+      );
+    }
+
+    if (!data) {
+      // If no profile exists, return a default structure
+      return NextResponse.json({
+        user_id: userId,
+        start_date: null,
+        license_number: null,
+        specializations: [],
+        notes: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    // Parse specializations if they exist
+    if (typeof data.specializations === "string") {
+      try {
+        data.specializations = JSON.parse(data.specializations);
+      } catch (e) {
+        console.error("Error parsing specializations:", e);
+        data.specializations = [];
+      }
     }
 
     return NextResponse.json(data);

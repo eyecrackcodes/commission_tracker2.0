@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { supabase } from "@/lib/supabase";
+import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
-import { sendPolicyNotification } from "@/lib/slack";
 
 interface PolicyFormData {
   client: string;
@@ -26,18 +25,20 @@ interface AddPolicyButtonProps {
   onPolicyAdded?: () => void;
 }
 
+interface AgentProfile {
+  start_date: string | null;
+}
+
 export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
-  const [agentProfile, setAgentProfile] = useState<{
-    start_date: string | null;
-  } | null>(null);
-  const { register, handleSubmit, reset, setValue } = useForm<PolicyFormData>();
+  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  const { register, handleSubmit, reset } = useForm<PolicyFormData>();
   const { user } = useUser();
 
   useEffect(() => {
-    async function fetchAgentProfile() {
+    const fetchAgentProfile = async () => {
       if (!user) return;
 
       try {
@@ -52,33 +53,56 @@ export default function AddPolicyButton({
       } catch (err) {
         console.error("Error fetching agent profile:", err);
       }
-    }
+    };
 
     fetchAgentProfile();
   }, [user]);
 
   const triggerConfetti = () => {
-    console.log("Triggering confetti effect");
+    const count = 200;
+    const defaults = {
+      origin: { y: 0.7 },
+      zIndex: 999,
+    };
 
-    // Fire confetti from the left edge
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { x: 0, y: 0.6 },
+    function fire(particleRatio: number, opts: any) {
+      confetti({
+        ...defaults,
+        ...opts,
+        particleCount: Math.floor(count * particleRatio),
+      });
+    }
+
+    fire(0.25, {
+      spread: 26,
+      startVelocity: 55,
+      origin: { x: 0.2 },
     });
 
-    // Fire confetti from the right edge
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { x: 1, y: 0.6 },
+    fire(0.2, {
+      spread: 60,
+      origin: { x: 0.5 },
     });
 
-    // Fire confetti from the center
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { x: 0.5, y: 0.6 },
+    fire(0.35, {
+      spread: 100,
+      decay: 0.91,
+      scalar: 0.8,
+      origin: { x: 0.8 },
+    });
+
+    fire(0.1, {
+      spread: 120,
+      startVelocity: 25,
+      decay: 0.92,
+      scalar: 1.2,
+      origin: { x: 0.5 },
+    });
+
+    fire(0.1, {
+      spread: 120,
+      startVelocity: 45,
+      origin: { x: 0.5 },
     });
   };
 
@@ -107,24 +131,10 @@ export default function AddPolicyButton({
         throw error;
       }
 
-      // Send Slack notification
-      await sendPolicyNotification({
-        client: data.client,
-        carrier: data.carrier,
-        policy_number: data.policy_number,
-        commissionable_annual_premium: data.commissionable_annual_premium,
-        commission_rate: commissionRate,
-      });
-
-      console.log("Policy added successfully, showing confetti");
+      console.log("Policy added successfully");
       setShowModal(false);
       reset();
-
-      // Trigger confetti after a short delay to ensure the modal is closed
-      setTimeout(() => {
-        console.log("Triggering confetti");
-        triggerConfetti();
-      }, 100);
+      triggerConfetti();
 
       if (onPolicyAdded) {
         onPolicyAdded();
@@ -218,6 +228,7 @@ export default function AddPolicyButton({
                   <select
                     {...register("commission_rate", { required: true })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    defaultValue={agentProfile?.start_date ? "20" : "5"}
                   >
                     <option value="5">5%</option>
                     <option value="20">20%</option>
@@ -233,6 +244,7 @@ export default function AddPolicyButton({
                     {...register("commissionable_annual_premium", {
                       required: true,
                       min: 0,
+                      valueAsNumber: true,
                     })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   />

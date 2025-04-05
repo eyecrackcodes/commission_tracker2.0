@@ -1,5 +1,13 @@
-import { createClerkClient } from "@clerk/clerk-sdk-node";
-import { createClient } from "@supabase/supabase-js";
+require("dotenv").config();
+const { createClerkClient } = require("@clerk/clerk-sdk-node");
+const { createClient } = require("@supabase/supabase-js");
+
+interface AgentProfile {
+  user_id: string;
+  start_date?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 // Initialize Clerk client
 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -34,10 +42,10 @@ async function syncUsers() {
     }
 
     const existingUserIds = new Set(
-      existingProfiles?.map((p) => p.user_id) || []
+      existingProfiles?.map((p: AgentProfile) => p.user_id) || []
     );
     const usersToSync = clerkUsers.filter(
-      (user) => !existingUserIds.has(user.id)
+      (user: { id: string }) => !existingUserIds.has(user.id)
     );
 
     console.log(`Found ${usersToSync.length} users to sync`);

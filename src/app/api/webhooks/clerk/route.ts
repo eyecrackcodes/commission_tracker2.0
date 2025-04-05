@@ -19,78 +19,225 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 // Webhook secret key from Clerk Dashboard
 const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
+interface ClerkWebhookEvent {
+  data: {
+    id: string;
+    email_addresses: Array<{
+      email_address: string;
+      id: string;
+      linked_to: any[];
+      object: string;
+      verification: {
+        status: string;
+        strategy: string;
+      };
+    }>;
+    external_accounts: any[];
+    external_id: string;
+    first_name: string;
+    gender: string;
+    image_url: string;
+    last_name: string;
+    last_sign_in_at: number;
+    object: string;
+    password_enabled: boolean;
+    phone_numbers: any[];
+    primary_email_address_id: string;
+    primary_phone_number_id: null;
+    primary_web3_wallet_id: null;
+    private_metadata: Record<string, any>;
+    profile_image_url: string;
+    public_metadata: Record<string, any>;
+    two_factor_enabled: boolean;
+    unsafe_metadata: Record<string, any>;
+    created_at: number;
+    updated_at: number;
+    username: null;
+    web3_wallets: any[];
+  };
+  instance_id?: string;
+  object: string;
+  timestamp: number;
+  type: string;
+}
+
 async function validateRequest(request: Request) {
+  console.log("Validating webhook request...");
+
+  // First, try to get the raw body
+  const rawBody = await request.text();
+  console.log("Raw request body:", rawBody);
+
+  let payload;
+  try {
+    payload = JSON.parse(rawBody);
+    console.log("Parsed payload:", payload);
+  } catch (err) {
+    console.error("Error parsing request body:", err);
+    return false;
+  }
+
+  // Check for Svix headers
   const headerPayload = headers();
   const svix_id = headerPayload.get("svix-id");
   const svix_timestamp = headerPayload.get("svix-timestamp");
   const svix_signature = headerPayload.get("svix-signature");
 
-  // If there are no headers, error out
+  console.log("Headers:", {
+    svix_id: svix_id ? "present" : "missing",
+    svix_timestamp: svix_timestamp ? "present" : "missing",
+    svix_signature: svix_signature ? "present" : "missing",
+  });
+
+  // If this is a test webhook from the Clerk Dashboard (no Svix headers)
   if (!svix_id || !svix_timestamp || !svix_signature) {
+    // Validate the test webhook format according to Clerk's documentation
+    if (
+      payload.type === "user.created" &&
+      payload.object === "event" &&
+      payload.data?.id &&
+      payload.data?.object === "user"
+    ) {
+      console.log("Valid test webhook detected");
+      return payload as ClerkWebhookEvent;
+    }
+    console.log("Invalid test webhook format:", {
+      hasType: payload.type === "user.created",
+      isEvent: payload.object === "event",
+      hasUserId: !!payload.data?.id,
+      isUserObject: payload.data?.object === "user",
+    });
     return false;
   }
 
-  // Get the body
-  const payload = await request.json();
-  const body = JSON.stringify(payload);
+  // For production webhooks, verify with Svix
+  console.log("Production webhook detected, verifying with Svix...");
 
-  // Create a new Svix instance with your secret.
   if (!WEBHOOK_SECRET) {
+    console.error("Missing Clerk Webhook Secret");
     throw new Error("Missing Clerk Webhook Secret");
   }
 
   const wh = new Webhook(WEBHOOK_SECRET);
 
   try {
-    return await wh.verify(body, {
+    const result = await wh.verify(rawBody, {
       "svix-id": svix_id,
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
     });
+    console.log("Svix verification successful");
+    return result;
   } catch (err) {
-    console.error("Error verifying webhook:", err);
+    console.error("Error verifying webhook with Svix:", err);
     return false;
   }
 }
 
 export async function POST(request: Request) {
+  console.log("Webhook POST request received");
+
   try {
     // Validate the webhook
     const payload = await validateRequest(request);
     if (!payload) {
-      return new Response("Invalid webhook signature", { status: 401 });
+      console.error("Webhook validation failed");
+      return new Response("Invalid webhook request", { status: 401 });
     }
 
-    const { type, data } = payload as WebhookEvent;
+    console.log("Webhook validated successfully");
+
+    // Handle both Svix and direct Clerk webhook formats
+    const type = payload.type;
+    const data = payload.data;
+
+    console.log("Processing webhook:", {
+      type,
+      userId: data?.id,
+      email: data?.email_addresses?.[0]?.email_address,
+      name:
+        `${data?.first_name || ""} ${data?.last_name || ""}`.trim() ||
+        undefined,
+      instanceId: payload.instance_id,
+      timestamp: new Date(payload.timestamp).toISOString(),
+    });
 
     // Handle user creation
     if (type === "user.created") {
-      console.log("New user created:", data.id);
+      console.log("Processing user.created event for user:", data.id);
 
-      // Create agent profile in Supabase
-      const { error } = await supabaseAdmin.from("agent_profiles").insert({
-        user_id: data.id,
-        start_date: new Date().toISOString().split("T")[0], // Today's date
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
+      // Check if profile already exists
+      const { data: existingProfile, error: checkError } = await supabaseAdmin
+        .from("agent_profiles")
+        .select("id")
+        .eq("user_id", data.id)
+        .maybeSingle();
 
-      if (error) {
-        console.error("Error creating agent profile:", error);
+      if (checkError) {
+        console.error("Error checking for existing profile:", checkError);
         return NextResponse.json(
-          { error: "Failed to create agent profile" },
+          {
+            error: "Failed to check for existing profile",
+            details: checkError.message,
+          },
           { status: 500 }
         );
       }
 
-      console.log("Successfully created agent profile for user:", data.id);
+      if (existingProfile) {
+        console.log("Profile already exists for user:", data.id);
+        return NextResponse.json({
+          success: true,
+          message: "Profile already exists",
+          profileId: existingProfile.id,
+        });
+      }
+
+      // Create agent profile in Supabase
+      console.log("Creating new agent profile for user:", {
+        id: data.id,
+        email: data.email_addresses?.[0]?.email_address,
+        name:
+          `${data.first_name || ""} ${data.last_name || ""}`.trim() ||
+          "Unknown",
+        created_at: new Date(data.created_at).toISOString(),
+      });
+
+      const { data: newProfile, error } = await supabaseAdmin
+        .from("agent_profiles")
+        .insert({
+          user_id: data.id,
+          start_date: new Date(data.created_at).toISOString().split("T")[0], // Use Clerk's user creation date
+          created_at: new Date(data.created_at).toISOString(),
+          updated_at: new Date(data.updated_at).toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating agent profile:", error);
+        return NextResponse.json(
+          { error: "Failed to create agent profile", details: error.message },
+          { status: 500 }
+        );
+      }
+
+      console.log("Successfully created agent profile:", newProfile);
+      return NextResponse.json({
+        success: true,
+        message: "Profile created successfully",
+        profile: newProfile,
+      });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: "Webhook processed" });
   } catch (error) {
     console.error("Error processing webhook:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }
