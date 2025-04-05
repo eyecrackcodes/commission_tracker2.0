@@ -12,6 +12,10 @@ import { useUser } from "@clerk/nextjs";
 import { format, differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
 
+export interface PolicyTableRef {
+  fetchPolicies: () => Promise<void>;
+}
+
 interface EditPolicyFormData {
   client: string;
   carrier: string;
@@ -54,12 +58,13 @@ interface AgentProfile {
   start_date: string | null;
 }
 
-const PolicyTable = forwardRef((props, ref) => {
+const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
     status: "all",
     dateRange: "all",
@@ -965,11 +970,11 @@ const PolicyTable = forwardRef((props, ref) => {
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("status")}
+                    onClick={() => handleSort("policy_status")}
                     className="flex items-center focus:outline-none"
                   >
                     Status
-                    {sort.field === "status" && (
+                    {sort.field === "policy_status" && (
                       <span className="ml-1">
                         {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
@@ -981,11 +986,11 @@ const PolicyTable = forwardRef((props, ref) => {
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("premium")}
+                    onClick={() => handleSort("commissionable_annual_premium")}
                     className="flex items-center focus:outline-none"
                   >
                     Premium
-                    {sort.field === "premium" && (
+                    {sort.field === "commissionable_annual_premium" && (
                       <span className="ml-1">
                         {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
@@ -997,11 +1002,11 @@ const PolicyTable = forwardRef((props, ref) => {
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   <button
-                    onClick={() => handleSort("commission")}
+                    onClick={() => handleSort("commission_due")}
                     className="flex items-center focus:outline-none"
                   >
                     Commission
-                    {sort.field === "commission" && (
+                    {sort.field === "commission_due" && (
                       <span className="ml-1">
                         {sort.direction === "asc" ? "↑" : "↓"}
                       </span>
