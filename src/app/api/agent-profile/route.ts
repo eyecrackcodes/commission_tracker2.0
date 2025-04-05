@@ -28,6 +28,18 @@ export async function GET() {
       .single();
 
     if (error) {
+      // Check if the error is because no profile was found
+      if (error.code === "PGRST116") {
+        // Return 404 with a more user-friendly message
+        return NextResponse.json(
+          {
+            error: "Profile not found",
+            message: "No agent profile exists for this user yet",
+          },
+          { status: 404 }
+        );
+      }
+
       console.error("Error fetching profile:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
