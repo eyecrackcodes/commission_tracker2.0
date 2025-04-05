@@ -40,16 +40,6 @@ interface FilterOptions {
   searchTerm: string;
 }
 
-type SortField =
-  | "client"
-  | "carrier"
-  | "policy_number"
-  | "product"
-  | "policy_status"
-  | "commissionable_annual_premium"
-  | "commission_due";
-type SortDirection = "asc" | "desc";
-
 interface AgentProfile {
   start_date: string | null;
 }
