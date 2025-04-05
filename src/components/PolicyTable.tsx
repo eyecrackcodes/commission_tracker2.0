@@ -11,7 +11,6 @@ import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import { format, differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
-import { CSVLink } from "react-csv";
 
 interface EditPolicyFormData {
   client: string;
@@ -493,19 +492,6 @@ const PolicyTable = forwardRef((props, ref) => {
     setFilters((prev) => ({ ...prev, searchTerm: "" }));
   };
 
-  const csvHeaders = [
-    { label: "Client", key: "client" },
-    { label: "Carrier", key: "carrier" },
-    { label: "Policy Number", key: "policy_number" },
-    { label: "Product", key: "product" },
-    { label: "Status", key: "policy_status" },
-    { label: "Premium", key: "commissionable_annual_premium" },
-    { label: "Commission Rate", key: "commission_rate" },
-    { label: "Commission", key: "commission_due" },
-    { label: "First Payment Date", key: "first_payment_date" },
-    { label: "Inforce Date", key: "inforce_date" },
-  ];
-
   const handleSort = (field: SortField) => {
     setSort((prev) => ({
       field,
@@ -882,35 +868,6 @@ const PolicyTable = forwardRef((props, ref) => {
           Policies
         </h2>
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-          <button
-            className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            onClick={() => {
-              const csvLink = document.createElement("a");
-              csvLink.click();
-            }}
-          >
-            <CSVLink
-              data={filteredPolicies}
-              headers={csvHeaders}
-              filename={`policies_${format(new Date(), "yyyy-MM-dd")}.csv`}
-              className="inline-flex items-center"
-            >
-              <svg
-                className="h-4 w-4 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                />
-              </svg>
-              Export to CSV
-            </CSVLink>
-          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
