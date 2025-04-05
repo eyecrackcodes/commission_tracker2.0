@@ -5,7 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import { differenceInMonths } from "date-fns";
 
 interface AgentProfile {
-  id: number;
+  id?: number;
   user_id: string;
   start_date: string | null;
   license_number: string | null;
@@ -30,30 +30,44 @@ export default function AgentProfile() {
     return differenceInMonths(today, startDate);
   }, [profile?.start_date]);
 
-  const getTenureBasedCommissionRate = useCallback(
-    (baseRate: number) => {
-      const tenureMonths = calculateTenureMonths();
-      if (tenureMonths >= 24) return baseRate * 1.1; // 2+ years: 10% bonus
-      if (tenureMonths >= 12) return baseRate * 1.05; // 1+ year: 5% bonus
-      if (tenureMonths >= 6) return baseRate * 1.02; // 6+ months: 2% bonus
-      return baseRate; // Less than 6 months: base rate
-    },
-    [calculateTenureMonths]
-  );
+  const getTenureBasedCommissionRate = useCallback(() => {
+    const tenureMonths = calculateTenureMonths();
+    return tenureMonths >= 6 ? 0.2 : 0.05; // 20% after 6 months, 5% before
+  }, [calculateTenureMonths]);
 
   const fetchProfile = useCallback(async () => {
     if (!user) return;
 
     try {
+      setError(null);
       const response = await fetch("/api/agent-profile");
 
       if (!response.ok) {
-        const errorData = await response.json();
+        if (response.status === 404) {
+          // No profile exists yet, this is not an error
+          setProfile({
+            user_id: user.id,
+            start_date: null,
+            license_number: null,
+            specializations: [],
+            notes: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          return;
+        }
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Failed to load profile" }));
         throw new Error(errorData.error || "Failed to load profile");
       }
 
       const data = await response.json();
-      if (typeof data?.specializations === "string") {
+
+      // Ensure specializations is always an array
+      if (!data.specializations) {
+        data.specializations = [];
+      } else if (typeof data.specializations === "string") {
         try {
           data.specializations = JSON.parse(data.specializations);
         } catch (e) {
@@ -61,10 +75,11 @@ export default function AgentProfile() {
           data.specializations = [];
         }
       }
+
       setProfile(data);
     } catch (err) {
       console.error("Error fetching profile:", err);
-      setError("Failed to load profile");
+      setError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
       setIsLoading(false);
     }
@@ -157,9 +172,6 @@ export default function AgentProfile() {
   }
 
   const tenureMonths = calculateTenureMonths();
-  const baseCommissionRate = 0.05; // 5% base rate
-  const adjustedCommissionRate =
-    getTenureBasedCommissionRate(baseCommissionRate);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
@@ -373,21 +385,15 @@ export default function AgentProfile() {
                     <div className="mt-2 text-sm text-blue-700">
                       <p>Tenure: {tenureMonths} months</p>
                       <p>
-                        Base Commission Rate:{" "}
-                        {(baseCommissionRate * 100).toFixed(1)}%
+                        Commission Rate: {getTenureBasedCommissionRate() * 100}%
                       </p>
-                      <p>
-                        Adjusted Commission Rate:{" "}
-                        {(adjustedCommissionRate * 100).toFixed(1)}%
-                      </p>
-                      {tenureMonths >= 6 && (
+                      {tenureMonths >= 6 ? (
                         <p className="mt-1 text-xs">
-                          * Includes tenure bonus of{" "}
-                          {tenureMonths >= 24
-                            ? "10%"
-                            : tenureMonths >= 12
-                            ? "5%"
-                            : "2%"}
+                          * Increased rate applied (6+ months tenure)
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs">
+                          * Base rate applied (under 6 months tenure)
                         </p>
                       )}
                     </div>
