@@ -126,7 +126,7 @@ async function validateRequest(request: Request) {
       "svix-signature": svix_signature,
     });
     console.log("Svix verification successful");
-    return result;
+    return result as ClerkWebhookEvent;
   } catch (err) {
     console.error("Error verifying webhook with Svix:", err);
     return false;
@@ -147,8 +147,8 @@ export async function POST(request: Request) {
     console.log("Webhook validated successfully");
 
     // Handle both Svix and direct Clerk webhook formats
-    const type = payload.type;
-    const data = payload.data;
+    const type = (payload as ClerkWebhookEvent).type;
+    const data = (payload as ClerkWebhookEvent).data;
 
     console.log("Processing webhook:", {
       type,
@@ -157,8 +157,10 @@ export async function POST(request: Request) {
       name:
         `${data?.first_name || ""} ${data?.last_name || ""}`.trim() ||
         undefined,
-      instanceId: payload.instance_id,
-      timestamp: new Date(payload.timestamp).toISOString(),
+      instanceId: (payload as ClerkWebhookEvent).instance_id,
+      timestamp: new Date(
+        (payload as ClerkWebhookEvent).timestamp
+      ).toISOString(),
     });
 
     // Handle user creation
