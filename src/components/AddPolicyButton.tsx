@@ -52,16 +52,50 @@ export default function AddPolicyButton({
       if (!user) return;
 
       try {
+        console.log("Fetching agent profile for user:", user.id);
         const { data, error } = await supabase
           .from("agent_profiles")
           .select("start_date")
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching agent profile:", error);
+          setAgentProfile({ start_date: null });
+          return;
+        }
+
+        if (!data) {
+          console.log("No agent profile found for user:", user.id);
+          // Try to create a profile if it doesn't exist
+          try {
+            const response = await fetch("/api/create-agent-profile", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ userId: user.id }),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error("Error creating agent profile:", errorData);
+            } else {
+              const result = await response.json();
+              console.log("Agent profile created:", result);
+              setAgentProfile({
+                start_date: result.profile?.start_date || null,
+              });
+              return;
+            }
+          } catch (createError) {
+            console.error("Exception creating agent profile:", createError);
+          }
+        }
+
         setAgentProfile(data || { start_date: null });
       } catch (err) {
-        console.error("Error fetching agent profile:", err);
+        console.error("Error in fetchAgentProfile:", err);
         setAgentProfile({ start_date: null });
       }
     };

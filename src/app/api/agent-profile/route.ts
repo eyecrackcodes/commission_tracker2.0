@@ -92,55 +92,83 @@ export async function POST(request: NextRequest) {
     if (existingProfile) {
       // Update existing profile
       console.log("Updating existing profile with ID:", existingProfile.id);
-      const { data, error } = await supabaseClient
-        .from("agent_profiles")
-        .update({
-          start_date: start_date || null,
-          license_number: license_number || null,
-          specializations: processedSpecializations
-            ? JSON.stringify(processedSpecializations)
-            : null,
-          notes: notes || null,
-        })
-        .eq("id", existingProfile.id)
-        .select()
-        .single();
+      try {
+        const { data, error } = await supabaseClient
+          .from("agent_profiles")
+          .update({
+            start_date: start_date || null,
+            license_number: license_number || null,
+            specializations: processedSpecializations
+              ? JSON.stringify(processedSpecializations)
+              : null,
+            notes: notes || null,
+          })
+          .eq("id", existingProfile.id)
+          .select()
+          .single();
 
-      if (error) {
-        console.error("Error updating profile:", error);
+        if (error) {
+          console.error("Error updating profile:", error);
+          return NextResponse.json(
+            { error: `Failed to update profile: ${error.message}` },
+            { status: 500 }
+          );
+        }
+        result = data;
+        console.log("Profile updated successfully:", result);
+      } catch (updateError) {
+        console.error("Exception updating profile:", updateError);
         return NextResponse.json(
-          { error: `Failed to update profile: ${error.message}` },
+          {
+            error: `Exception updating profile: ${
+              updateError instanceof Error
+                ? updateError.message
+                : String(updateError)
+            }`,
+          },
           { status: 500 }
         );
       }
-      result = data;
-      console.log("Profile updated successfully:", result);
     } else {
       // Create new profile
       console.log("Creating new profile for user:", userId);
-      const { data, error } = await supabaseClient
-        .from("agent_profiles")
-        .insert({
-          user_id: userId,
-          start_date: start_date || null,
-          license_number: license_number || null,
-          specializations: processedSpecializations
-            ? JSON.stringify(processedSpecializations)
-            : null,
-          notes: notes || null,
-        })
-        .select()
-        .single();
+      try {
+        const { data, error } = await supabaseClient
+          .from("agent_profiles")
+          .insert({
+            user_id: userId,
+            start_date: start_date || null,
+            license_number: license_number || null,
+            specializations: processedSpecializations
+              ? JSON.stringify(processedSpecializations)
+              : null,
+            notes: notes || null,
+          })
+          .select()
+          .single();
 
-      if (error) {
-        console.error("Error creating profile:", error);
+        if (error) {
+          console.error("Error creating profile:", error);
+          return NextResponse.json(
+            { error: `Failed to create profile: ${error.message}` },
+            { status: 500 }
+          );
+        }
+        result = data;
+        console.log("Profile created successfully:", result);
+      } catch (createError) {
+        console.error("Exception creating profile:", createError);
         return NextResponse.json(
-          { error: `Failed to create profile: ${error.message}` },
+          {
+            error: `Exception creating profile: ${
+              createError instanceof Error
+                ? createError.message
+                : String(createError)
+            }`,
+          },
           { status: 500 }
         );
       }
-      result = data;
-      console.log("Profile created successfully:", result);
     }
 
     return NextResponse.json(result);

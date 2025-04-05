@@ -204,31 +204,42 @@ export async function POST(request: Request) {
         created_at: new Date(data.created_at).toISOString(),
       });
 
-      const { data: newProfile, error } = await supabaseAdmin
-        .from("agent_profiles")
-        .insert({
-          user_id: data.id,
-          start_date: new Date(data.created_at).toISOString().split("T")[0], // Use Clerk's user creation date
-          created_at: new Date(data.created_at).toISOString(),
-          updated_at: new Date(data.updated_at).toISOString(),
-        })
-        .select()
-        .single();
+      try {
+        const { data: newProfile, error } = await supabaseAdmin
+          .from("agent_profiles")
+          .insert({
+            user_id: data.id,
+            start_date: new Date(data.created_at).toISOString().split("T")[0], // Use Clerk's user creation date
+            created_at: new Date(data.created_at).toISOString(),
+            updated_at: new Date(data.updated_at).toISOString(),
+          })
+          .select()
+          .single();
 
-      if (error) {
-        console.error("Error creating agent profile:", error);
+        if (error) {
+          console.error("Error creating agent profile:", error);
+          return NextResponse.json(
+            { error: "Failed to create agent profile", details: error.message },
+            { status: 500 }
+          );
+        }
+
+        console.log("Successfully created agent profile:", newProfile);
+        return NextResponse.json({
+          success: true,
+          message: "Profile created successfully",
+          profile: newProfile,
+        });
+      } catch (profileError) {
+        console.error("Exception creating agent profile:", profileError);
         return NextResponse.json(
-          { error: "Failed to create agent profile", details: error.message },
+          { 
+            error: "Exception creating agent profile", 
+            details: profileError instanceof Error ? profileError.message : String(profileError) 
+          },
           { status: 500 }
         );
       }
-
-      console.log("Successfully created agent profile:", newProfile);
-      return NextResponse.json({
-        success: true,
-        message: "Profile created successfully",
-        profile: newProfile,
-      });
     }
 
     return NextResponse.json({ success: true, message: "Webhook processed" });
