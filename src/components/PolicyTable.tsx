@@ -574,6 +574,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
         <p className="mt-1 text-sm text-gray-500">
           Get started by creating a new policy.
         </p>
+        <div className="mt-4">
+          <AddPolicyButton onPolicyAdded={fetchPolicies} />
+        </div>
       </div>
     );
   }
