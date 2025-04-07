@@ -44,12 +44,16 @@ export default function AddPolicyButton({
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const { register, handleSubmit, reset } = useForm<PolicyFormData>();
   const { user } = useUser();
 
   useEffect(() => {
     const fetchAgentProfile = async () => {
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
         console.log("Fetching agent profile for user:", user.id);
@@ -58,7 +62,9 @@ export default function AddPolicyButton({
         if (!response.ok) {
           const errorData = await response.json();
           console.error("Error fetching agent profile:", errorData);
-          setAgentProfile({ start_date: null });
+          // Even if there's an error, we'll set a default profile to allow policy creation
+          setAgentProfile({ start_date: new Date().toISOString().split('T')[0] });
+          setIsLoading(false);
           return;
         }
 
@@ -67,15 +73,18 @@ export default function AddPolicyButton({
 
         if (data) {
           setAgentProfile({
-            start_date: data.start_date,
+            start_date: data.start_date || new Date().toISOString().split('T')[0],
           });
         } else {
-          console.log("No agent profile data received");
-          setAgentProfile({ start_date: null });
+          console.log("No agent profile data received, using default");
+          setAgentProfile({ start_date: new Date().toISOString().split('T')[0] });
         }
       } catch (err) {
         console.error("Error in fetchAgentProfile:", err);
-        setAgentProfile({ start_date: null });
+        // Even if there's an error, we'll set a default profile to allow policy creation
+        setAgentProfile({ start_date: new Date().toISOString().split('T')[0] });
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -172,7 +181,10 @@ export default function AddPolicyButton({
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        disabled={isLoading}
+        className={`inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
+          isLoading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+        } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
       >
         <svg
           className="h-4 w-4 mr-2"
@@ -187,7 +199,7 @@ export default function AddPolicyButton({
             d="M12 6v6m0 0v6m0-6h6m-6 0H6"
           />
         </svg>
-        Add Policy
+        {isLoading ? 'Loading...' : 'Add Policy'}
       </button>
 
       {showModal && (
