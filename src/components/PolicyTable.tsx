@@ -615,7 +615,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                   ${summaryStats.active.premium.toLocaleString()} in premiums
                 </p>
                 <p className="text-xs md:text-sm text-gray-600">
-                  ${summaryStats.active.commission.toLocaleString()} in
+                  ${summaryStats.active.commission.toFixed(2).toLocaleString()} in
                   commissions
                 </p>
               </div>
@@ -653,7 +653,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                   ${summaryStats.pending.premium.toLocaleString()} in premiums
                 </p>
                 <p className="text-xs md:text-sm text-gray-600">
-                  ${summaryStats.pending.commission.toLocaleString()} in
+                  ${summaryStats.pending.commission.toFixed(2).toLocaleString()} in
                   commissions
                 </p>
               </div>
@@ -691,7 +691,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                   ${summaryStats.cancelled.premium.toLocaleString()} in premiums
                 </p>
                 <p className="text-xs md:text-sm text-gray-600">
-                  ${summaryStats.cancelled.commission.toLocaleString()} in
+                  ${summaryStats.cancelled.commission.toFixed(2).toLocaleString()} in
                   commissions
                 </p>
               </div>
@@ -1036,7 +1036,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                       ${policy.commissionable_annual_premium.toLocaleString()}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
-                      ${policy.commission_due.toLocaleString()}
+                      ${policy.commission_due.toFixed(2).toLocaleString()}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex space-x-2">
@@ -1069,7 +1069,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
             Total Commission
           </h2>
           <p className="text-2xl md:text-3xl font-bold text-blue-600">
-            ${totalCommission.toLocaleString()}
+            ${totalCommission.toFixed(2).toLocaleString()}
           </p>
         </div>
       </div>
