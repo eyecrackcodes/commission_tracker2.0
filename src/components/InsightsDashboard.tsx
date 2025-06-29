@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { supabase, Policy } from "@/lib/supabase";
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   PieChart,
@@ -67,13 +65,7 @@ export default function InsightsDashboard() {
   const [timeRange, setTimeRange] = useState(6); // months
   const { user } = useUser();
 
-  useEffect(() => {
-    if (user) {
-      fetchPolicies();
-    }
-  }, [user]);
-
-  const fetchPolicies = async () => {
+  const fetchPolicies = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -92,7 +84,13 @@ export default function InsightsDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchPolicies();
+    }
+  }, [user, fetchPolicies]);
 
   const generateInsights = (policies: Policy[]) => {
     // Generate monthly commission data
