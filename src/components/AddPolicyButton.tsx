@@ -153,11 +153,16 @@ export default function AddPolicyButton({
         agentProfile?.start_date || null
       );
 
+      // Calculate commission due
+      const commissionDue =
+        finalData.commissionable_annual_premium * commissionRate;
+
       const { error } = await supabase.from("policies").insert([
         {
           ...finalData,
           user_id: user.id,
           commission_rate: commissionRate,
+          commission_due: commissionDue,
           created_at: new Date().toISOString(),
         },
       ]);
@@ -221,27 +226,38 @@ export default function AddPolicyButton({
       </button>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">Add New Policy</h2>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+              <h2 className="text-2xl font-bold text-white">Add New Policy</h2>
+              <p className="text-blue-100 mt-1">
+                Fill in the details below to add a new insurance policy
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="p-8 overflow-y-auto max-h-[calc(90vh-120px)]"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Client
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Client Name
                   </label>
                   <input
                     {...register("client", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter client name"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Carrier
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Insurance Carrier
                   </label>
                   <select
                     {...register("carrier", { required: !showCustomCarrier })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   >
                     <option value="">Select a carrier</option>
                     {getCarrierNames().map((carrier) => (
@@ -256,27 +272,30 @@ export default function AddPolicyButton({
                       value={customCarrierValue}
                       onChange={(e) => setCustomCarrierValue(e.target.value)}
                       placeholder="Enter custom carrier name"
-                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-2 w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                       required
                     />
                   )}
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Policy Number
                   </label>
                   <input
                     {...register("policy_number", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="Enter policy number"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Product Type
                   </label>
                   <select
                     {...register("product", { required: !showCustomProduct })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     disabled={!watchCarrier}
                   >
                     <option value="">
@@ -296,74 +315,102 @@ export default function AddPolicyButton({
                       value={customProductValue}
                       onChange={(e) => setCustomProductValue(e.target.value)}
                       placeholder="Enter custom product name"
-                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-2 w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                       required
                     />
                   )}
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Policy Status
                   </label>
                   <select
                     {...register("policy_status", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   >
                     <option value="Pending">Pending</option>
                     <option value="Active">Active</option>
                     <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Commission Rate
                   </label>
-                  <input
-                    type="text"
-                    {...register("commission_rate")}
-                    value={
-                      agentProfile
-                        ? `${
-                            calculateCommissionRate(agentProfile.start_date) *
-                            100
-                          }%`
-                        : "5%"
-                    }
-                    disabled
-                    className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      {...register("commission_rate")}
+                      value={
+                        agentProfile
+                          ? `${
+                              calculateCommissionRate(agentProfile.start_date) *
+                              100
+                            }%`
+                          : "5%"
+                      }
+                      disabled
+                      className="w-full px-4 py-2 pr-12 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg
+                        className="h-5 w-5 text-gray-400"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                        />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Commissionable Annual Premium
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Annual Premium ($)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    {...register("commissionable_annual_premium", {
-                      required: true,
-                      min: 0,
-                    })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-gray-500">
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      {...register("commissionable_annual_premium", {
+                        required: true,
+                        min: 0,
+                      })}
+                      className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     First Payment Date
                   </label>
                   <input
                     type="date"
                     {...register("first_payment_date")}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Type of Payment
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Payment Frequency
                   </label>
                   <select
                     {...register("type_of_payment")}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   >
                     <option value="">Select payment type</option>
                     <option value="Monthly">Monthly</option>
@@ -372,38 +419,42 @@ export default function AddPolicyButton({
                     <option value="Annual">Annual</option>
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Inforce Date
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    In-Force Date
                   </label>
                   <input
                     type="date"
                     {...register("inforce_date")}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Comments
+
+              <div className="mt-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Additional Comments
                 </label>
                 <textarea
                   {...register("comments")}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   rows={3}
+                  placeholder="Enter any additional notes or comments..."
                 />
               </div>
-              <div className="flex justify-end space-x-4">
+
+              <div className="flex justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={handleModalClose}
-                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+                  className="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium shadow-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
                 >
                   Add Policy
                 </button>
