@@ -153,16 +153,11 @@ export default function AddPolicyButton({
       // Use the selected commission rate from the form
       const commissionRate = Number(data.commission_rate);
 
-      // Calculate commission due
-      const commissionDue =
-        finalData.commissionable_annual_premium * commissionRate;
-
       const { error } = await supabase.from("policies").insert([
         {
           ...finalData,
           user_id: user.id,
           commission_rate: commissionRate,
-          commission_due: commissionDue,
           created_at: new Date().toISOString(),
         },
       ]);
