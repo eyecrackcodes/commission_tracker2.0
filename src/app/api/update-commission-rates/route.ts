@@ -4,7 +4,6 @@ import {
   shouldUpdateCommissionRate,
   calculateCommissionRate,
 } from "@/lib/commission";
-import { sendCommissionRateChangeNotification } from "@/lib/slack";
 
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -38,23 +37,9 @@ export async function GET() {
         const { error: updateError } = await supabase
           .from("policies")
           .update({ commission_rate: newRate })
-          .eq("user_id", profile.user_id)
-          .eq("commission_rate", 0.05); // Only update policies at 5%
+          .eq("user_id", profile.user_id);
 
-        if (updateError) {
-          console.error(
-            `Error updating policies for user ${profile.user_id}:`,
-            updateError
-          );
-          continue;
-        }
-
-        // Send Slack notification
-        await sendCommissionRateChangeNotification(
-          profile.user_id,
-          0.05,
-          newRate
-        );
+        if (updateError) throw updateError;
 
         updates.push({
           userId: profile.user_id,

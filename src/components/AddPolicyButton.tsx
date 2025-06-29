@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
-import { sendPolicyNotification } from "@/lib/slack";
+import { getCarrierNames, getProductsByCarrier } from "@/lib/carriers";
 
 interface PolicyFormData {
   client: string;
@@ -33,8 +33,24 @@ export default function AddPolicyButton({
   const [agentProfile, setAgentProfile] = useState<{
     start_date: string | null;
   } | null>(null);
-  const { register, handleSubmit, reset, setValue } = useForm<PolicyFormData>();
+  const [selectedCarrier, setSelectedCarrier] = useState("");
+  const [availableProducts, setAvailableProducts] = useState<string[]>([]);
+  const { register, handleSubmit, reset, setValue, watch } =
+    useForm<PolicyFormData>();
   const { user } = useUser();
+
+  // Watch carrier field for changes
+  const watchCarrier = watch("carrier");
+
+  useEffect(() => {
+    // Update available products when carrier changes
+    if (watchCarrier) {
+      const products = getProductsByCarrier(watchCarrier);
+      setAvailableProducts(products);
+      // Reset product selection when carrier changes
+      setValue("product", "");
+    }
+  }, [watchCarrier, setValue]);
 
   useEffect(() => {
     async function fetchAgentProfile() {
@@ -56,6 +72,14 @@ export default function AddPolicyButton({
 
     fetchAgentProfile();
   }, [user]);
+
+  useEffect(() => {
+    // Calculate and set commission rate when agent profile is loaded
+    if (agentProfile) {
+      const rate = calculateCommissionRate(agentProfile.start_date);
+      setValue("commission_rate", rate);
+    }
+  }, [agentProfile, setValue]);
 
   const triggerConfetti = () => {
     console.log("Triggering confetti effect");
@@ -107,18 +131,10 @@ export default function AddPolicyButton({
         throw error;
       }
 
-      // Send Slack notification
-      await sendPolicyNotification({
-        client: data.client,
-        carrier: data.carrier,
-        policy_number: data.policy_number,
-        commissionable_annual_premium: data.commissionable_annual_premium,
-        commission_rate: commissionRate,
-      });
-
       console.log("Policy added successfully, showing confetti");
       setShowModal(false);
       reset();
+      setAvailableProducts([]);
 
       // Trigger confetti after a short delay to ensure the modal is closed
       setTimeout(() => {
@@ -132,6 +148,12 @@ export default function AddPolicyButton({
     } catch (err) {
       console.error("Error adding policy:", err);
     }
+  };
+
+  const handleModalClose = () => {
+    setShowModal(false);
+    reset();
+    setAvailableProducts([]);
   };
 
   return (
@@ -158,7 +180,7 @@ export default function AddPolicyButton({
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-lg w-full max-w-2xl">
+          <div className="bg-white p-8 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold mb-4">Add New Policy</h2>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -175,10 +197,17 @@ export default function AddPolicyButton({
                   <label className="block text-sm font-medium text-gray-700">
                     Carrier
                   </label>
-                  <input
+                  <select
                     {...register("carrier", { required: true })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="">Select a carrier</option>
+                    {getCarrierNames().map((carrier) => (
+                      <option key={carrier} value={carrier}>
+                        {carrier}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -193,10 +222,22 @@ export default function AddPolicyButton({
                   <label className="block text-sm font-medium text-gray-700">
                     Product
                   </label>
-                  <input
+                  <select
                     {...register("product", { required: true })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+                    disabled={!watchCarrier}
+                  >
+                    <option value="">
+                      {watchCarrier
+                        ? "Select a product"
+                        : "Select carrier first"}
+                    </option>
+                    {availableProducts.map((product) => (
+                      <option key={product} value={product}>
+                        {product}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -215,13 +256,20 @@ export default function AddPolicyButton({
                   <label className="block text-sm font-medium text-gray-700">
                     Commission Rate
                   </label>
-                  <select
-                    {...register("commission_rate", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="5">5%</option>
-                    <option value="20">20%</option>
-                  </select>
+                  <input
+                    type="text"
+                    {...register("commission_rate")}
+                    value={
+                      agentProfile
+                        ? `${
+                            calculateCommissionRate(agentProfile.start_date) *
+                            100
+                          }%`
+                        : "5%"
+                    }
+                    disabled
+                    className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -251,10 +299,16 @@ export default function AddPolicyButton({
                   <label className="block text-sm font-medium text-gray-700">
                     Type of Payment
                   </label>
-                  <input
+                  <select
                     {...register("type_of_payment")}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+                  >
+                    <option value="">Select payment type</option>
+                    <option value="Monthly">Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Semi-Annual">Semi-Annual</option>
+                    <option value="Annual">Annual</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -280,7 +334,7 @@ export default function AddPolicyButton({
               <div className="flex justify-end space-x-4">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleModalClose}
                   className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
                 >
                   Cancel
