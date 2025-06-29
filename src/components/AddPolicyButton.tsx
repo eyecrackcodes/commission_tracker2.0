@@ -35,22 +35,41 @@ export default function AddPolicyButton({
   } | null>(null);
   const [selectedCarrier, setSelectedCarrier] = useState("");
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
+  const [showCustomCarrier, setShowCustomCarrier] = useState(false);
+  const [showCustomProduct, setShowCustomProduct] = useState(false);
   const { register, handleSubmit, reset, setValue, watch } =
     useForm<PolicyFormData>();
   const { user } = useUser();
 
   // Watch carrier field for changes
   const watchCarrier = watch("carrier");
+  const watchProduct = watch("product");
 
   useEffect(() => {
     // Update available products when carrier changes
     if (watchCarrier) {
-      const products = getProductsByCarrier(watchCarrier);
-      setAvailableProducts(products);
+      if (watchCarrier === "Custom") {
+        setShowCustomCarrier(true);
+        setAvailableProducts(["Custom Product"]);
+      } else {
+        setShowCustomCarrier(false);
+        const products = getProductsByCarrier(watchCarrier);
+        setAvailableProducts(products);
+      }
       // Reset product selection when carrier changes
       setValue("product", "");
+      setShowCustomProduct(false);
     }
   }, [watchCarrier, setValue]);
+
+  useEffect(() => {
+    // Check if custom product is selected
+    if (watchProduct === "Custom Product") {
+      setShowCustomProduct(true);
+    } else {
+      setShowCustomProduct(false);
+    }
+  }, [watchProduct]);
 
   useEffect(() => {
     async function fetchAgentProfile() {
@@ -154,6 +173,8 @@ export default function AddPolicyButton({
     setShowModal(false);
     reset();
     setAvailableProducts([]);
+    setShowCustomCarrier(false);
+    setShowCustomProduct(false);
   };
 
   return (
@@ -198,7 +219,7 @@ export default function AddPolicyButton({
                     Carrier
                   </label>
                   <select
-                    {...register("carrier", { required: true })}
+                    {...register("carrier", { required: !showCustomCarrier })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   >
                     <option value="">Select a carrier</option>
@@ -208,6 +229,13 @@ export default function AddPolicyButton({
                       </option>
                     ))}
                   </select>
+                  {showCustomCarrier && (
+                    <input
+                      {...register("carrier", { required: true })}
+                      placeholder="Enter custom carrier name"
+                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
@@ -223,7 +251,7 @@ export default function AddPolicyButton({
                     Product
                   </label>
                   <select
-                    {...register("product", { required: true })}
+                    {...register("product", { required: !showCustomProduct })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     disabled={!watchCarrier}
                   >
@@ -238,6 +266,13 @@ export default function AddPolicyButton({
                       </option>
                     ))}
                   </select>
+                  {showCustomProduct && (
+                    <input
+                      {...register("product", { required: true })}
+                      placeholder="Enter custom product name"
+                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">

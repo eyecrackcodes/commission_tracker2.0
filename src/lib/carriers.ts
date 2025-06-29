@@ -9,6 +9,10 @@ export const carriers: CarrierProduct[] = [
     carrier: "GTL - Guarantee Trust Life",
     products: ["Preferred", "Standard", "Graded", "Guaranteed Issue"],
   },
+  {
+    carrier: "Custom",
+    products: ["Custom Product"],
+  },
   // Add more carriers here as needed
 ];
 
