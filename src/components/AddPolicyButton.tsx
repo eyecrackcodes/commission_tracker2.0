@@ -80,13 +80,15 @@ export default function AddPolicyButton({
       if (!user) return;
 
       try {
-        const { data, error } = await supabase
-          .from("agent_profiles")
-          .select("start_date")
-          .eq("user_id", user.id)
-          .single();
+        const response = await fetch("/api/agent-profile");
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("Failed to fetch agent profile:", errorData);
+          return;
+        }
+
+        const data = await response.json();
         setAgentProfile(data);
       } catch (err) {
         console.error("Error fetching agent profile:", err);
@@ -148,10 +150,8 @@ export default function AddPolicyButton({
             : data.product,
       };
 
-      // Calculate commission rate based on tenure
-      const commissionRate = calculateCommissionRate(
-        agentProfile?.start_date || null
-      );
+      // Use the selected commission rate from the form
+      const commissionRate = Number(data.commission_rate);
 
       // Calculate commission due
       const commissionDue =
@@ -339,37 +339,28 @@ export default function AddPolicyButton({
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Commission Rate
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      {...register("commission_rate")}
-                      value={
-                        agentProfile
-                          ? `${
-                              calculateCommissionRate(agentProfile.start_date) *
-                              100
-                            }%`
-                          : "5%"
-                      }
-                      disabled
-                      className="w-full px-4 py-2 pr-12 border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
-                    />
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                      <svg
-                        className="h-5 w-5 text-gray-400"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                        />
-                      </svg>
-                    </div>
-                  </div>
+                  <select
+                    {...register("commission_rate", { required: true })}
+                    defaultValue={
+                      agentProfile
+                        ? calculateCommissionRate(agentProfile.start_date)
+                        : 0.05
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <option value={0.025}>2.5%</option>
+                    <option value={0.05}>5%</option>
+                    <option value={0.1}>10%</option>
+                    <option value={0.2}>20%</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Default based on your tenure:{" "}
+                    {agentProfile
+                      ? `${
+                          calculateCommissionRate(agentProfile.start_date) * 100
+                        }%`
+                      : "5%"}
+                  </p>
                 </div>
 
                 <div>
