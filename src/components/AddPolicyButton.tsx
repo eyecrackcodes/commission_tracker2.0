@@ -36,6 +36,8 @@ export default function AddPolicyButton({
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
   const [showCustomCarrier, setShowCustomCarrier] = useState(false);
   const [showCustomProduct, setShowCustomProduct] = useState(false);
+  const [customCarrierValue, setCustomCarrierValue] = useState("");
+  const [customProductValue, setCustomProductValue] = useState("");
   const { register, handleSubmit, reset, setValue, watch } =
     useForm<PolicyFormData>();
   const { user } = useUser();
@@ -52,12 +54,14 @@ export default function AddPolicyButton({
         setAvailableProducts(["Custom Product"]);
       } else {
         setShowCustomCarrier(false);
+        setCustomCarrierValue("");
         const products = getProductsByCarrier(watchCarrier);
         setAvailableProducts(products);
       }
       // Reset product selection when carrier changes
       setValue("product", "");
       setShowCustomProduct(false);
+      setCustomProductValue("");
     }
   }, [watchCarrier, setValue]);
 
@@ -67,6 +71,7 @@ export default function AddPolicyButton({
       setShowCustomProduct(true);
     } else {
       setShowCustomProduct(false);
+      setCustomProductValue("");
     }
   }, [watchProduct]);
 
@@ -130,6 +135,19 @@ export default function AddPolicyButton({
     try {
       console.log("Submitting policy data:", data);
 
+      // Use custom values if they exist
+      const finalData = {
+        ...data,
+        carrier:
+          showCustomCarrier && customCarrierValue
+            ? customCarrierValue
+            : data.carrier,
+        product:
+          showCustomProduct && customProductValue
+            ? customProductValue
+            : data.product,
+      };
+
       // Calculate commission rate based on tenure
       const commissionRate = calculateCommissionRate(
         agentProfile?.start_date || null
@@ -137,7 +155,7 @@ export default function AddPolicyButton({
 
       const { error } = await supabase.from("policies").insert([
         {
-          ...data,
+          ...finalData,
           user_id: user.id,
           commission_rate: commissionRate,
           created_at: new Date().toISOString(),
@@ -153,6 +171,8 @@ export default function AddPolicyButton({
       setShowModal(false);
       reset();
       setAvailableProducts([]);
+      setCustomCarrierValue("");
+      setCustomProductValue("");
 
       // Trigger confetti after a short delay to ensure the modal is closed
       setTimeout(() => {
@@ -174,6 +194,8 @@ export default function AddPolicyButton({
     setAvailableProducts([]);
     setShowCustomCarrier(false);
     setShowCustomProduct(false);
+    setCustomCarrierValue("");
+    setCustomProductValue("");
   };
 
   return (
@@ -205,7 +227,7 @@ export default function AddPolicyButton({
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Client
                   </label>
                   <input
@@ -214,7 +236,7 @@ export default function AddPolicyButton({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Carrier
                   </label>
                   <select
@@ -230,14 +252,17 @@ export default function AddPolicyButton({
                   </select>
                   {showCustomCarrier && (
                     <input
-                      {...register("carrier", { required: true })}
+                      type="text"
+                      value={customCarrierValue}
+                      onChange={(e) => setCustomCarrierValue(e.target.value)}
                       placeholder="Enter custom carrier name"
                       className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Policy Number
                   </label>
                   <input
@@ -246,7 +271,7 @@ export default function AddPolicyButton({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Product
                   </label>
                   <select
@@ -267,14 +292,17 @@ export default function AddPolicyButton({
                   </select>
                   {showCustomProduct && (
                     <input
-                      {...register("product", { required: true })}
+                      type="text"
+                      value={customProductValue}
+                      onChange={(e) => setCustomProductValue(e.target.value)}
                       placeholder="Enter custom product name"
                       className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Policy Status
                   </label>
                   <select
@@ -287,7 +315,7 @@ export default function AddPolicyButton({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Commission Rate
                   </label>
                   <input
@@ -306,7 +334,7 @@ export default function AddPolicyButton({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Commissionable Annual Premium
                   </label>
                   <input
@@ -320,7 +348,7 @@ export default function AddPolicyButton({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     First Payment Date
                   </label>
                   <input
@@ -330,7 +358,7 @@ export default function AddPolicyButton({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Type of Payment
                   </label>
                   <select
@@ -345,7 +373,7 @@ export default function AddPolicyButton({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Inforce Date
                   </label>
                   <input
@@ -356,7 +384,7 @@ export default function AddPolicyButton({
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Comments
                 </label>
                 <textarea

@@ -10,6 +10,14 @@ export const carriers: CarrierProduct[] = [
     products: ["Preferred", "Standard", "Graded", "Guaranteed Issue"],
   },
   {
+    carrier: "SBLI",
+    products: ["Preferred", "Standard", "Modified"],
+  },
+  {
+    carrier: "Royal Neighbors of America (RNA)",
+    products: ["Preferred", "Standard", "Graded", "Guaranteed Issue"],
+  },
+  {
     carrier: "Custom",
     products: ["Custom Product"],
   },
