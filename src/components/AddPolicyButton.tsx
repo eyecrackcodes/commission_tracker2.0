@@ -33,7 +33,6 @@ export default function AddPolicyButton({
   const [agentProfile, setAgentProfile] = useState<{
     start_date: string | null;
   } | null>(null);
-  const [selectedCarrier, setSelectedCarrier] = useState("");
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
   const [showCustomCarrier, setShowCustomCarrier] = useState(false);
   const [showCustomProduct, setShowCustomProduct] = useState(false);
