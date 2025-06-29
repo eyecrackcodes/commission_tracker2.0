@@ -55,6 +55,7 @@ const COLORS = [
 
 export default function InsightsDashboard() {
   const [policies, setPolicies] = useState<Policy[]>([]);
+  const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
   const [insights, setInsights] = useState<InsightsData>({
     monthlyCommissions: [],
     productMix: [],
@@ -62,7 +63,10 @@ export default function InsightsDashboard() {
     statusDistribution: [],
   });
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState(6); // months
+  const [timeRange, setTimeRange] = useState(6); // months for forecast
+  const [dateFilter, setDateFilter] = useState("all"); // Date filter
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
   const { user } = useUser();
 
   const fetchPolicies = useCallback(async () => {
@@ -78,7 +82,7 @@ export default function InsightsDashboard() {
       if (error) throw error;
 
       setPolicies(data || []);
-      generateInsights(data || []);
+      applyDateFilter(data || []);
     } catch (err) {
       console.error("Error fetching policies:", err);
     } finally {
@@ -86,11 +90,65 @@ export default function InsightsDashboard() {
     }
   }, [user]);
 
+  const applyDateFilter = useCallback(
+    (allPolicies: Policy[]) => {
+      let filtered = [...allPolicies];
+      const now = new Date();
+      let startDate: Date | null = null;
+      let endDate: Date | null = null;
+
+      switch (dateFilter) {
+        case "month":
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          break;
+        case "quarter":
+          const quarter = Math.floor(now.getMonth() / 3);
+          startDate = new Date(now.getFullYear(), quarter * 3, 1);
+          endDate = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+          break;
+        case "year":
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(now.getFullYear(), 11, 31);
+          break;
+        case "ytd":
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = now;
+          break;
+        case "custom":
+          if (customStartDate && customEndDate) {
+            startDate = new Date(customStartDate);
+            endDate = new Date(customEndDate);
+            endDate.setHours(23, 59, 59, 999);
+          }
+          break;
+        default:
+          // "all" - no filtering
+          break;
+      }
+
+      if (startDate && endDate) {
+        filtered = allPolicies.filter((policy) => {
+          const policyDate = new Date(policy.created_at);
+          return policyDate >= startDate && policyDate <= endDate;
+        });
+      }
+
+      setFilteredPolicies(filtered);
+      generateInsights(filtered);
+    },
+    [dateFilter, customStartDate, customEndDate]
+  );
+
   useEffect(() => {
     if (user) {
       fetchPolicies();
     }
   }, [user, fetchPolicies]);
+
+  useEffect(() => {
+    applyDateFilter(policies);
+  }, [policies, applyDateFilter]);
 
   const generateInsights = (policies: Policy[]) => {
     // Generate monthly commission data
@@ -237,18 +295,18 @@ export default function InsightsDashboard() {
     }));
   };
 
-  const totalCommission = policies.reduce(
+  const totalCommission = filteredPolicies.reduce(
     (sum, p) => sum + p.commission_due,
     0
   );
-  const totalPremium = policies.reduce(
+  const totalPremium = filteredPolicies.reduce(
     (sum, p) => sum + p.commissionable_annual_premium,
     0
   );
   const avgCommissionRate =
-    policies.length > 0
-      ? policies.reduce((sum, p) => sum + p.commission_rate, 0) /
-        policies.length
+    filteredPolicies.length > 0
+      ? filteredPolicies.reduce((sum, p) => sum + p.commission_rate, 0) /
+        filteredPolicies.length
       : 0;
 
   if (loading) {
@@ -261,6 +319,51 @@ export default function InsightsDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Date Range Filter */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">
+              Date Range:
+            </label>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="all">All Time</option>
+              <option value="month">This Month</option>
+              <option value="quarter">This Quarter</option>
+              <option value="year">This Year</option>
+              <option value="ytd">Year to Date</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          {dateFilter === "custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <span className="text-gray-500">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          )}
+
+          <div className="ml-auto text-sm text-gray-600">
+            Showing {filteredPolicies.length} of {policies.length} policies
+          </div>
+        </div>
+      </div>
+
       {/* Header Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-6">
@@ -281,7 +384,7 @@ export default function InsightsDashboard() {
             ${totalPremium.toLocaleString()}
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            Across {policies.length} policies
+            Across {filteredPolicies.length} policies
           </p>
         </div>
 
@@ -298,14 +401,20 @@ export default function InsightsDashboard() {
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-sm font-medium text-gray-500">Active Policies</h3>
           <p className="text-2xl font-bold text-gray-900 mt-2">
-            {policies.filter((p) => p.policy_status === "Active").length}
+            {
+              filteredPolicies.filter((p) => p.policy_status === "Active")
+                .length
+            }
           </p>
           <p className="text-sm text-gray-500 mt-1">
-            {(
-              (policies.filter((p) => p.policy_status === "Active").length /
-                policies.length) *
-              100
-            ).toFixed(0)}
+            {filteredPolicies.length > 0
+              ? (
+                  (filteredPolicies.filter((p) => p.policy_status === "Active")
+                    .length /
+                    filteredPolicies.length) *
+                  100
+                ).toFixed(0)
+              : 0}
             % of total
           </p>
         </div>
