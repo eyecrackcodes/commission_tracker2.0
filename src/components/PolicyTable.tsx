@@ -430,14 +430,15 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     if (!user || !editingPolicy) return;
 
     try {
-      // Convert empty date strings to null
+      // Convert empty date strings to null and calculate commission
       const baseCommissionRate = data.commission_rate / 100;
-      const tenureAdjustedRate =
-        getTenureBasedCommissionRate(baseCommissionRate);
+      const tenureAdjustedRate = getTenureBasedCommissionRate(baseCommissionRate);
+      const commissionDue = data.commissionable_annual_premium * tenureAdjustedRate;
 
       const formattedData = {
         ...data,
         commission_rate: tenureAdjustedRate,
+        commission_due: commissionDue,
         first_payment_date: data.first_payment_date || null,
         inforce_date: data.inforce_date || null,
         date_commission_paid: data.date_commission_paid || null,
