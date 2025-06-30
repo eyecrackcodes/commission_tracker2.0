@@ -85,13 +85,18 @@ export default function AddPolicyButton({
         if (!response.ok) {
           const errorData = await response.json();
           console.error("Failed to fetch agent profile:", errorData);
+          // Don't return here - allow the component to work without a profile
+          setAgentProfile(null);
           return;
         }
 
         const data = await response.json();
-        setAgentProfile(data);
+        // Handle null response for new users
+        setAgentProfile(data || null);
       } catch (err) {
         console.error("Error fetching agent profile:", err);
+        // Don't block the component - allow it to work without a profile
+        setAgentProfile(null);
       }
     }
 
@@ -100,10 +105,9 @@ export default function AddPolicyButton({
 
   useEffect(() => {
     // Calculate and set commission rate when agent profile is loaded
-    if (agentProfile) {
-      const rate = calculateCommissionRate(agentProfile.start_date);
-      setValue("commission_rate", rate);
-    }
+    // Use default rate if no profile exists
+    const rate = calculateCommissionRate(agentProfile?.start_date || null);
+    setValue("commission_rate", rate);
   }, [agentProfile, setValue]);
 
   const triggerConfetti = () => {
