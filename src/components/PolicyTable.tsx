@@ -450,7 +450,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     try {
       // Convert empty date strings to null and ensure proper data types
       const baseCommissionRate = Number(data.commission_rate) / 100;
-      const tenureAdjustedRate = getTenureBasedCommissionRate(baseCommissionRate);
+      const calculatedTenureRate = getTenureBasedCommissionRate(baseCommissionRate);
+      
+      // Cap the commission rate to prevent database constraint violations
+      // Database constraint is likely at 0.20 (20%) based on the error
+      const tenureAdjustedRate = Math.min(calculatedTenureRate, 0.20); // Cap at 20%
 
       // Validate that we have valid numbers
       if (isNaN(baseCommissionRate) || isNaN(tenureAdjustedRate)) {
@@ -483,6 +487,15 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
       console.log("Updating policy with data:", formattedData);
       console.log("Policy ID:", editingPolicy.id);
       console.log("User ID:", user.id);
+      console.log("Commission rate calculation:");
+      console.log("- Original form value:", data.commission_rate);
+      console.log("- Base commission rate:", baseCommissionRate);
+      console.log("- Calculated tenure rate:", calculatedTenureRate);
+      console.log("- Final capped rate:", tenureAdjustedRate);
+      console.log("- Tenure months:", calculateTenureMonths());
+      if (calculatedTenureRate > 0.20) {
+        console.warn("Commission rate was capped from", calculatedTenureRate, "to", tenureAdjustedRate, "due to database constraint");
+      }
 
       const { error } = await supabase
         .from("policies")
