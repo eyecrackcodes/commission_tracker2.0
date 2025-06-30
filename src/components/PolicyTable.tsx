@@ -360,31 +360,49 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   }, []);
 
   const calculateTenureMonths = () => {
-    if (!agentProfile?.start_date) return 0;
+    try {
+      if (!agentProfile?.start_date) return 0;
 
-    const startDate = new Date(agentProfile.start_date);
-    const today = new Date();
+      const startDate = new Date(agentProfile.start_date);
+      const today = new Date();
 
-    return differenceInMonths(today, startDate);
+      // Validate dates
+      if (isNaN(startDate.getTime()) || isNaN(today.getTime())) {
+        console.error("Invalid date in tenure calculation");
+        return 0;
+      }
+
+      const months = differenceInMonths(today, startDate);
+      return Math.max(0, months); // Ensure non-negative
+    } catch (error) {
+      console.error("Error calculating tenure months:", error);
+      return 0;
+    }
   };
 
   const getTenureBasedCommissionRate = (baseRate: number) => {
-    const tenureMonths = calculateTenureMonths();
+    try {
+      const tenureMonths = calculateTenureMonths();
 
-    // Apply tenure-based commission rate adjustments
-    if (tenureMonths >= 24) {
-      // 2+ years: 10% bonus
-      return baseRate * 1.1;
-    } else if (tenureMonths >= 12) {
-      // 1+ year: 5% bonus
-      return baseRate * 1.05;
-    } else if (tenureMonths >= 6) {
-      // 6+ months: 2% bonus
-      return baseRate * 1.02;
+      // Apply tenure-based commission rate adjustments
+      if (tenureMonths >= 24) {
+        // 2+ years: 10% bonus
+        return baseRate * 1.1;
+      } else if (tenureMonths >= 12) {
+        // 1+ year: 5% bonus
+        return baseRate * 1.05;
+      } else if (tenureMonths >= 6) {
+        // 6+ months: 2% bonus
+        return baseRate * 1.02;
+      }
+
+      // Less than 6 months: base rate
+      return baseRate;
+    } catch (error) {
+      console.error("Error calculating tenure-based commission rate:", error);
+      // Return base rate if there's an error
+      return baseRate;
     }
-
-    // Less than 6 months: base rate
-    return baseRate;
   };
 
   const handleDelete = async (id: number) => {
@@ -430,19 +448,41 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     if (!user || !editingPolicy) return;
 
     try {
-      // Convert empty date strings to null
-      const baseCommissionRate = data.commission_rate / 100;
+      // Convert empty date strings to null and ensure proper data types
+      const baseCommissionRate = Number(data.commission_rate) / 100;
       const tenureAdjustedRate = getTenureBasedCommissionRate(baseCommissionRate);
 
+      // Validate that we have valid numbers
+      if (isNaN(baseCommissionRate) || isNaN(tenureAdjustedRate)) {
+        throw new Error("Invalid commission rate calculation");
+      }
+
+      const annualPremium = Number(data.commissionable_annual_premium);
+      if (isNaN(annualPremium) || annualPremium < 0) {
+        throw new Error("Invalid annual premium amount");
+      }
+
       const formattedData = {
-        ...data,
+        client: data.client?.trim() || editingPolicy.client,
+        carrier: data.carrier?.trim() || editingPolicy.carrier,
+        policy_number: data.policy_number?.trim() || editingPolicy.policy_number,
+        product: data.product?.trim() || editingPolicy.product,
+        policy_status: data.policy_status || editingPolicy.policy_status,
+        commissionable_annual_premium: annualPremium,
         commission_rate: tenureAdjustedRate,
         first_payment_date: data.first_payment_date || null,
+        type_of_payment: data.type_of_payment || null,
         inforce_date: data.inforce_date || null,
         date_commission_paid: data.date_commission_paid || null,
+        comments: data.comments || null,
       };
 
       // Note: commission_due is a generated column and will be automatically calculated by the database
+
+      // Log the data being sent for debugging
+      console.log("Updating policy with data:", formattedData);
+      console.log("Policy ID:", editingPolicy.id);
+      console.log("User ID:", user.id);
 
       const { error } = await supabase
         .from("policies")
@@ -451,7 +491,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         .eq("user_id", user.id);
 
       if (error) {
-        console.error("Supabase error:", error);
+        console.error("Supabase error details:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        console.error("Error details:", error.details);
+        console.error("Error hint:", error.hint);
         throw error;
       }
 
