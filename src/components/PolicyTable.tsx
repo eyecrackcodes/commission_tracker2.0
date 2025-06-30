@@ -105,18 +105,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         throw supabaseError;
       }
 
-      // Debug: Log the commission calculations
-      console.log("DEBUG: Commission calculation analysis:");
-      (data || []).forEach((policy) => {
-        const expectedCommission = policy.commissionable_annual_premium * policy.commission_rate;
-        console.log(`Policy ${policy.policy_number}:`, {
-          premium: policy.commissionable_annual_premium,
-          storedRate: policy.commission_rate,
-          storedCommission: policy.commission_due,
-          expectedCommission: expectedCommission,
-          isCorrect: Math.abs(expectedCommission - policy.commission_due) < 0.01
-        });
-      });
+
 
       setPolicies(data || []);
     } catch (err) {
