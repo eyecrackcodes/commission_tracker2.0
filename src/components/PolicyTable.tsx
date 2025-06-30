@@ -452,9 +452,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
       const baseCommissionRate = Number(data.commission_rate) / 100;
       const calculatedTenureRate = getTenureBasedCommissionRate(baseCommissionRate);
       
-      // Cap the commission rate to prevent database constraint violations
-      // Database constraint is likely at 0.20 (20%) based on the error
-      const tenureAdjustedRate = Math.min(calculatedTenureRate, 0.20); // Cap at 20%
+      // Database constraint only allows specific discrete values
+      // Round to the nearest allowed commission rate value
+      const allowedRates = [0.025, 0.05, 0.1, 0.2]; // 2.5%, 5%, 10%, 20%
+      const tenureAdjustedRate = allowedRates.reduce((prev, curr) => {
+        return Math.abs(curr - calculatedTenureRate) < Math.abs(prev - calculatedTenureRate) ? curr : prev;
+      });
 
       // Validate that we have valid numbers
       if (isNaN(baseCommissionRate) || isNaN(tenureAdjustedRate)) {
@@ -491,10 +494,10 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
       console.log("- Original form value:", data.commission_rate);
       console.log("- Base commission rate:", baseCommissionRate);
       console.log("- Calculated tenure rate:", calculatedTenureRate);
-      console.log("- Final capped rate:", tenureAdjustedRate);
+      console.log("- Final rounded rate:", tenureAdjustedRate);
       console.log("- Tenure months:", calculateTenureMonths());
-      if (calculatedTenureRate > 0.20) {
-        console.warn("Commission rate was capped from", calculatedTenureRate, "to", tenureAdjustedRate, "due to database constraint");
+      if (calculatedTenureRate !== tenureAdjustedRate) {
+        console.warn("Commission rate was rounded from", calculatedTenureRate, "to", tenureAdjustedRate, "to match database constraint (only discrete values allowed)");
       }
 
       const { error } = await supabase
