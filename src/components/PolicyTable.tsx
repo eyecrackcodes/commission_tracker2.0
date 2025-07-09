@@ -12,6 +12,7 @@ import { useUser } from "@clerk/nextjs";
 import { differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
 import AddPolicyButton from "@/components/AddPolicyButton";
+import SlackNotificationModal from "@/components/SlackNotificationModal";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
@@ -79,6 +80,21 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     direction: "asc",
   });
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  interface SlackPolicyData {
+    client: string;
+    carrier: string;
+    policy_number: string;
+    product: string;
+    policy_status: string;
+    commissionable_annual_premium: number;
+    commission_rate: number;
+    first_payment_date: string;
+    type_of_payment: string;
+    inforce_date: string;
+    comments: string;
+  }
+  
+  const [slackPolicyData, setSlackPolicyData] = useState<SlackPolicyData | null>(null);
 
   const { user } = useUser();
   const { register, handleSubmit, reset, setValue } =
@@ -650,7 +666,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
             Get started by creating a new policy.
           </p>
           <div className="mt-6">
-            <AddPolicyButton onPolicyAdded={fetchPolicies} />
+            <AddPolicyButton onPolicyAdded={(policyData) => {
+            if (policyData) {
+              setSlackPolicyData(policyData);
+            }
+            fetchPolicies();
+          }} />
           </div>
         </div>
       </div>
@@ -938,7 +959,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
           Policies
         </h2>
-        <AddPolicyButton onPolicyAdded={fetchPolicies} />
+                  <AddPolicyButton onPolicyAdded={(policyData) => {
+            if (policyData) {
+              setSlackPolicyData(policyData);
+            }
+            fetchPolicies();
+          }} />
       </div>
 
       {/* Table */}
@@ -1329,6 +1355,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
           </div>
         </div>
       )}
+
+      {/* Slack Notification Modal */}
+      <SlackNotificationModal 
+        policyData={slackPolicyData}
+        onClose={() => setSlackPolicyData(null)}
+      />
     </>
   );
 });

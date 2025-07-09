@@ -7,7 +7,6 @@ import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
 import { getCarrierNames, getProductsByCarrier } from "@/lib/carriers";
-import { getBestUserName, getUserEmail } from "@/lib/userUtils";
 
 interface PolicyFormData {
   client: string;
@@ -24,17 +23,13 @@ interface PolicyFormData {
 }
 
 interface AddPolicyButtonProps {
-  onPolicyAdded?: () => void;
+  onPolicyAdded?: (policyData?: PolicyFormData) => void;
 }
 
 export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
-  const [showSlackModal, setShowSlackModal] = useState(false);
-  const [lastPolicyData, setLastPolicyData] = useState<PolicyFormData | null>(null);
-  const [slackAcronym, setSlackAcronym] = useState("OCC");
-  const [slackLoading, setSlackLoading] = useState(false);
   const [agentProfile, setAgentProfile] = useState<{
     start_date: string | null;
   } | null>(null);
@@ -115,6 +110,8 @@ export default function AddPolicyButton({
     setValue("commission_rate", rate);
   }, [agentProfile, setValue]);
 
+
+
   const triggerConfetti = () => {
     console.log("Triggering confetti effect");
 
@@ -140,61 +137,7 @@ export default function AddPolicyButton({
     });
   };
 
-  const sendSlackNotification = async (type: 'full' | 'quick', acronym?: string) => {
-    if (!lastPolicyData || !user) return;
 
-    setSlackLoading(true);
-    try {
-      const carrier = showCustomCarrier && customCarrierValue ? customCarrierValue : lastPolicyData.carrier;
-      const product = showCustomProduct && customProductValue ? customProductValue : lastPolicyData.product;
-      
-      const payload = {
-        type: type === 'full' ? 'policy_notification' : 'quick_post',
-        data: type === 'full' ? {
-          carrier,
-          product,
-          premium: lastPolicyData.commissionable_annual_premium,
-          userEmail: getUserEmail(user),
-          userName: getBestUserName(user)
-        } : {
-          carrier,
-          product,
-          premium: lastPolicyData.commissionable_annual_premium,
-          acronym: acronym || slackAcronym,
-          userName: getBestUserName(user)
-        }
-      };
-
-      const response = await fetch('/api/slack-notification', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        console.log('Slack notification sent successfully');
-        setShowSlackModal(false);
-        setLastPolicyData(null);
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Failed to send Slack notification:', errorData);
-        
-        // Show user-friendly error message
-        if (response.status === 500) {
-          alert('⚠️ Slack notification failed!\n\nThis is likely because Slack environment variables are not configured yet.\n\nTo fix this:\n1. Set up your Slack bot token\n2. Configure the channel ID\n3. Add them to your .env.local file\n\nSee README.md for setup instructions.');
-        } else {
-          alert('Failed to send Slack notification. Please try again.');
-        }
-      }
-    } catch (error) {
-      console.error('Error sending Slack notification:', error);
-      alert('Network error while sending Slack notification. Please check your connection and try again.');
-    } finally {
-      setSlackLoading(false);
-    }
-  };
 
   const onSubmit = async (data: PolicyFormData) => {
     if (!user) return;
@@ -235,33 +178,21 @@ export default function AddPolicyButton({
       }
 
       console.log("Policy added successfully, showing confetti");
+      
       setShowModal(false);
       reset();
       setAvailableProducts([]);
       setCustomCarrierValue("");
       setCustomProductValue("");
 
-      // Store the policy data for potential Slack notification
-      console.log("Storing policy data for Slack:", finalData);
-      setLastPolicyData(finalData);
-
-      // Trigger confetti after a short delay to ensure the modal is closed
+      // Trigger confetti after a short delay
       setTimeout(() => {
         console.log("Triggering confetti");
         triggerConfetti();
       }, 100);
 
-      // Show Slack notification modal
-      setTimeout(() => {
-        console.log("Attempting to show Slack modal...");
-        console.log("showSlackModal state before:", showSlackModal);
-        console.log("lastPolicyData state:", lastPolicyData);
-        setShowSlackModal(true);
-        console.log("setShowSlackModal(true) called");
-      }, 500);
-
       if (onPolicyAdded) {
-        onPolicyAdded();
+        onPolicyAdded(finalData);
       }
     } catch (err) {
       console.error("Error adding policy:", err);
@@ -270,8 +201,6 @@ export default function AddPolicyButton({
 
   const handleModalClose = () => {
     setShowModal(false);
-    setShowSlackModal(false);
-    setLastPolicyData(null);
     reset();
     setAvailableProducts([]);
     setShowCustomCarrier(false);
@@ -280,24 +209,7 @@ export default function AddPolicyButton({
     setCustomProductValue("");
   };
 
-  // Debug function to test Slack modal
-  const testSlackModal = () => {
-    console.log("Testing Slack modal manually...");
-    setLastPolicyData({
-      client: "Test Client",
-      carrier: "Test Carrier",
-      product: "Test Product",
-      commissionable_annual_premium: 1000,
-      policy_number: "TEST123",
-      policy_status: "Active",
-      commission_rate: 0.05,
-      first_payment_date: "",
-      type_of_payment: "",
-      inforce_date: "",
-      comments: ""
-    });
-    setShowSlackModal(true);
-  };
+
 
   return (
     <>
@@ -321,15 +233,7 @@ export default function AddPolicyButton({
         Add Policy
       </button>
       
-      {/* Debug button - temporary for testing */}
-      {process.env.NODE_ENV === 'development' && (
-        <button
-          onClick={testSlackModal}
-          className="ml-2 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          🧪 Test Slack Modal
-        </button>
-      )}
+
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -561,74 +465,7 @@ export default function AddPolicyButton({
         </div>
       )}
 
-      {/* Slack Notification Modal */}
-      {(() => {
-        console.log("Slack modal render check:", { showSlackModal, hasLastPolicyData: !!lastPolicyData });
-        return null;
-      })()}
-      {showSlackModal && lastPolicyData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-            <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
-              <h2 className="text-xl font-bold text-white">🎉 Policy Added Successfully!</h2>
-              <p className="text-green-100 mt-1">
-                Share this sale on Slack?
-              </p>
-            </div>
 
-            <div className="p-6">
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600 mb-2">Policy Details:</p>
-                <p className="font-semibold">{showCustomCarrier && customCarrierValue ? customCarrierValue : lastPolicyData.carrier} | {showCustomProduct && customProductValue ? customProductValue : lastPolicyData.product}</p>
-                <p className="text-lg font-bold text-green-600">
-                  {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    minimumFractionDigits: 2,
-                  }).format(lastPolicyData.commissionable_annual_premium)}
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => sendSlackNotification('full')}
-                  disabled={slackLoading}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {slackLoading ? 'Sending...' : '📢 Send Full Notification'}
-                </button>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={slackAcronym}
-                    onChange={(e) => setSlackAcronym(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    placeholder="Enter acronym (e.g., OCC)"
-                  />
-                  <button
-                    onClick={() => sendSlackNotification('quick', slackAcronym)}
-                    disabled={slackLoading}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {slackLoading ? 'Sending...' : '⚡ Quick Post'}
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setShowSlackModal(false);
-                    setLastPolicyData(null);
-                  }}
-                  className="w-full px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                >
-                  Skip Slack Notification
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
