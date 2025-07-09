@@ -938,9 +938,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
           Policies
         </h2>
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-          <AddPolicyButton onPolicyAdded={fetchPolicies} />
-        </div>
+        <AddPolicyButton onPolicyAdded={fetchPolicies} />
       </div>
 
       {/* Table */}
