@@ -666,12 +666,14 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
             Get started by creating a new policy.
           </p>
           <div className="mt-6">
-            <AddPolicyButton onPolicyAdded={(policyData) => {
-            if (policyData) {
-              setSlackPolicyData(policyData);
-            }
-            fetchPolicies();
-          }} />
+            <AddPolicyButton 
+              onPolicyAdded={(policyData) => {
+                if (policyData) {
+                  setSlackPolicyData(policyData);
+                }
+                fetchPolicies();
+              }} 
+            />
           </div>
         </div>
       </div>
@@ -959,12 +961,14 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
           Policies
         </h2>
-                  <AddPolicyButton onPolicyAdded={(policyData) => {
+        <AddPolicyButton 
+          onPolicyAdded={(policyData) => {
             if (policyData) {
               setSlackPolicyData(policyData);
             }
             fetchPolicies();
-          }} />
+          }} 
+        />
       </div>
 
       {/* Table */}
