@@ -3,11 +3,12 @@
 import { useState } from "react";
 import PolicyTable from "@/components/PolicyTable";
 import AgentProfile from "@/components/AgentProfile";
+import InsightsDashboard from "@/components/InsightsDashboard";
 
 export default function DashboardContent() {
-  const [activeTab, setActiveTab] = useState<"policies" | "profile">(
-    "policies"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "policies" | "profile" | "insights"
+  >("policies");
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -20,9 +21,19 @@ export default function DashboardContent() {
               activeTab === "policies"
                 ? "bg-blue-500 text-white"
                 : "bg-gray-200 text-gray-700"
-            } px-4 py-2 rounded-md`}
+            } px-4 py-2 rounded-md transition-colors`}
           >
             Policies
+          </button>
+          <button
+            onClick={() => setActiveTab("insights")}
+            className={`${
+              activeTab === "insights"
+                ? "bg-blue-500 text-white"
+                : "bg-gray-200 text-gray-700"
+            } px-4 py-2 rounded-md transition-colors`}
+          >
+            Insights
           </button>
           <button
             onClick={() => setActiveTab("profile")}
@@ -30,14 +41,16 @@ export default function DashboardContent() {
               activeTab === "profile"
                 ? "bg-blue-500 text-white"
                 : "bg-gray-200 text-gray-700"
-            } px-4 py-2 rounded-md`}
+            } px-4 py-2 rounded-md transition-colors`}
           >
             Profile
           </button>
         </div>
       </div>
 
-      {activeTab === "policies" ? <PolicyTable /> : <AgentProfile />}
+      {activeTab === "policies" && <PolicyTable />}
+      {activeTab === "insights" && <InsightsDashboard />}
+      {activeTab === "profile" && <AgentProfile />}
     </div>
   );
 }

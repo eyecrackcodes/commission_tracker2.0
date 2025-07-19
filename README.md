@@ -11,12 +11,41 @@ A web application for insurance agents to track their policies and commissions. 
 - Policy filtering and search
 - Export policies to CSV
 - Automatic commission rate adjustments based on agent tenure
+- Slack integration for sharing policy sales
 
 ## Commission Rules
 
 - Agents receive 5% commission for the first 6 months of employment
 - Commission rate automatically increases to 20% after 6 months
 - Commission rate changes are tracked automatically
+
+## Slack Integration
+
+The application includes optional Slack integration for sharing policy sales:
+
+- **Full Notifications**: Share detailed policy information including carrier, product, premium, client, and agent details
+- **Quick Posts**: Share abbreviated policy information with custom acronyms (e.g., "OCC - Carrier | Product | $Premium")
+- **Automatic Prompts**: After adding a policy, users are prompted to share on Slack
+- **Configurable**: Set your Slack bot token and channel ID in environment variables
+
+### Setting up Slack Integration
+
+1. Create a Slack app at https://api.slack.com/apps
+2. Add the following OAuth scopes: `chat:write`, `channels:read`
+3. Install the app to your workspace
+4. Copy the Bot User OAuth Token to `SLACK_BOT_TOKEN`
+5. Set your target channel ID in `SLACK_CHANNEL_ID`
+
+### User Name Parsing
+
+The application intelligently parses user names from email addresses when full names aren't available from the authentication provider:
+
+- **Email patterns supported**: 
+  - `john.doe@example.com` → "John Doe"
+  - `mary_jane@example.com` → "Mary Jane"
+  - `john-doe@example.com` → "John Doe"
+  - `anthony@example.com` → "Anthony"
+- **Priority order**: Full Name → First + Last Name → First Name → Parsed from Email → "Unknown Agent"
 
 ## Tech Stack
 
@@ -39,6 +68,10 @@ CLERK_SECRET_KEY=your_clerk_secret_key
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# Slack Integration (Optional)
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token-here
+SLACK_CHANNEL_ID=your_slack_channel_id
 ```
 
 ## Deployment on Vercel

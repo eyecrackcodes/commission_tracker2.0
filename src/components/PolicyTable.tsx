@@ -12,6 +12,7 @@ import { useUser } from "@clerk/nextjs";
 import { differenceInMonths } from "date-fns";
 import { useForm } from "react-hook-form";
 import AddPolicyButton from "@/components/AddPolicyButton";
+import SlackNotificationModal from "@/components/SlackNotificationModal";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
@@ -79,6 +80,21 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     direction: "asc",
   });
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  interface SlackPolicyData {
+    client: string;
+    carrier: string;
+    policy_number: string;
+    product: string;
+    policy_status: string;
+    commissionable_annual_premium: number;
+    commission_rate: number;
+    first_payment_date: string;
+    type_of_payment: string;
+    inforce_date: string;
+    comments: string;
+  }
+  
+  const [slackPolicyData, setSlackPolicyData] = useState<SlackPolicyData | null>(null);
 
   const { user } = useUser();
   const { register, handleSubmit, reset, setValue } =
@@ -104,6 +120,8 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
       if (supabaseError) {
         throw supabaseError;
       }
+
+
 
       setPolicies(data || []);
     } catch (err) {
@@ -340,14 +358,19 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         if (!response.ok) {
           const errorData = await response.json();
           console.error("Failed to fetch agent profile:", errorData);
+          // Don't block the component - allow it to work without a profile
+          setAgentProfile(null);
           return;
         }
 
         const data = await response.json();
         console.log("Agent profile fetched successfully:", data);
-        setAgentProfile(data);
+        // Handle null response for new users
+        setAgentProfile(data || null);
       } catch (error) {
         console.error("Error fetching agent profile:", error);
+        // Don't block the component - allow it to work without a profile
+        setAgentProfile(null);
       }
     };
 
@@ -355,31 +378,49 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
   }, []);
 
   const calculateTenureMonths = () => {
-    if (!agentProfile?.start_date) return 0;
+    try {
+      if (!agentProfile?.start_date) return 0;
 
-    const startDate = new Date(agentProfile.start_date);
-    const today = new Date();
+      const startDate = new Date(agentProfile.start_date);
+      const today = new Date();
 
-    return differenceInMonths(today, startDate);
+      // Validate dates
+      if (isNaN(startDate.getTime()) || isNaN(today.getTime())) {
+        console.error("Invalid date in tenure calculation");
+        return 0;
+      }
+
+      const months = differenceInMonths(today, startDate);
+      return Math.max(0, months); // Ensure non-negative
+    } catch (error) {
+      console.error("Error calculating tenure months:", error);
+      return 0;
+    }
   };
 
   const getTenureBasedCommissionRate = (baseRate: number) => {
-    const tenureMonths = calculateTenureMonths();
+    try {
+      const tenureMonths = calculateTenureMonths();
 
-    // Apply tenure-based commission rate adjustments
-    if (tenureMonths >= 24) {
-      // 2+ years: 10% bonus
-      return baseRate * 1.1;
-    } else if (tenureMonths >= 12) {
-      // 1+ year: 5% bonus
-      return baseRate * 1.05;
-    } else if (tenureMonths >= 6) {
-      // 6+ months: 2% bonus
-      return baseRate * 1.02;
+      // Apply tenure-based commission rate adjustments
+      if (tenureMonths >= 24) {
+        // 2+ years: 10% bonus
+        return baseRate * 1.1;
+      } else if (tenureMonths >= 12) {
+        // 1+ year: 5% bonus
+        return baseRate * 1.05;
+      } else if (tenureMonths >= 6) {
+        // 6+ months: 2% bonus
+        return baseRate * 1.02;
+      }
+
+      // Less than 6 months: base rate
+      return baseRate;
+    } catch (error) {
+      console.error("Error calculating tenure-based commission rate:", error);
+      // Return base rate if there's an error
+      return baseRate;
     }
-
-    // Less than 6 months: base rate
-    return baseRate;
   };
 
   const handleDelete = async (id: number) => {
@@ -425,18 +466,57 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
     if (!user || !editingPolicy) return;
 
     try {
-      // Convert empty date strings to null
-      const baseCommissionRate = data.commission_rate / 100;
-      const tenureAdjustedRate =
-        getTenureBasedCommissionRate(baseCommissionRate);
+      // Convert empty date strings to null and ensure proper data types
+      const baseCommissionRate = Number(data.commission_rate) / 100;
+      const calculatedTenureRate = getTenureBasedCommissionRate(baseCommissionRate);
+      
+      // Database constraint only allows specific discrete values
+      // Round to the nearest allowed commission rate value
+      const allowedRates = [0.025, 0.05, 0.1, 0.2]; // 2.5%, 5%, 10%, 20%
+      const tenureAdjustedRate = allowedRates.reduce((prev, curr) => {
+        return Math.abs(curr - calculatedTenureRate) < Math.abs(prev - calculatedTenureRate) ? curr : prev;
+      });
+
+      // Validate that we have valid numbers
+      if (isNaN(baseCommissionRate) || isNaN(tenureAdjustedRate)) {
+        throw new Error("Invalid commission rate calculation");
+      }
+
+      const annualPremium = Number(data.commissionable_annual_premium);
+      if (isNaN(annualPremium) || annualPremium < 0) {
+        throw new Error("Invalid annual premium amount");
+      }
 
       const formattedData = {
-        ...data,
+        client: data.client?.trim() || editingPolicy.client,
+        carrier: data.carrier?.trim() || editingPolicy.carrier,
+        policy_number: data.policy_number?.trim() || editingPolicy.policy_number,
+        product: data.product?.trim() || editingPolicy.product,
+        policy_status: data.policy_status || editingPolicy.policy_status,
+        commissionable_annual_premium: annualPremium,
         commission_rate: tenureAdjustedRate,
         first_payment_date: data.first_payment_date || null,
+        type_of_payment: data.type_of_payment || null,
         inforce_date: data.inforce_date || null,
         date_commission_paid: data.date_commission_paid || null,
+        comments: data.comments || null,
       };
+
+      // Note: commission_due is a generated column and will be automatically calculated by the database
+
+      // Log the data being sent for debugging
+      console.log("Updating policy with data:", formattedData);
+      console.log("Policy ID:", editingPolicy.id);
+      console.log("User ID:", user.id);
+      console.log("Commission rate calculation:");
+      console.log("- Original form value:", data.commission_rate);
+      console.log("- Base commission rate:", baseCommissionRate);
+      console.log("- Calculated tenure rate:", calculatedTenureRate);
+      console.log("- Final rounded rate:", tenureAdjustedRate);
+      console.log("- Tenure months:", calculateTenureMonths());
+      if (calculatedTenureRate !== tenureAdjustedRate) {
+        console.warn("Commission rate was rounded from", calculatedTenureRate, "to", tenureAdjustedRate, "to match database constraint (only discrete values allowed)");
+      }
 
       const { error } = await supabase
         .from("policies")
@@ -445,7 +525,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         .eq("user_id", user.id);
 
       if (error) {
-        console.error("Supabase error:", error);
+        console.error("Supabase error details:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        console.error("Error details:", error.details);
+        console.error("Error hint:", error.hint);
         throw error;
       }
 
@@ -562,24 +646,36 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
 
   if (policies.length === 0) {
     return (
-      <div className="text-center py-12 bg-white rounded-lg shadow">
-        <svg
-          className="mx-auto h-12 w-12 text-gray-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-          />
-        </svg>
-        <h3 className="mt-2 text-sm font-medium text-gray-900">No policies</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Get started by creating a new policy.
-        </p>
+      <div>
+        <div className="text-center py-12 bg-white rounded-lg shadow">
+          <svg
+            className="mx-auto h-12 w-12 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+            />
+          </svg>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No policies</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Get started by creating a new policy.
+          </p>
+          <div className="mt-6">
+            <AddPolicyButton 
+              onPolicyAdded={(policyData) => {
+                if (policyData) {
+                  setSlackPolicyData(policyData);
+                }
+                fetchPolicies();
+              }} 
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -865,9 +961,14 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
         <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-4 sm:mb-0">
           Policies
         </h2>
-        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
-          <AddPolicyButton onPolicyAdded={fetchPolicies} />
-        </div>
+        <AddPolicyButton 
+          onPolicyAdded={(policyData) => {
+            if (policyData) {
+              setSlackPolicyData(policyData);
+            }
+            fetchPolicies();
+          }} 
+        />
       </div>
 
       {/* Table */}
@@ -1258,6 +1359,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((props, ref) => {
           </div>
         </div>
       )}
+
+      {/* Slack Notification Modal */}
+      <SlackNotificationModal 
+        policyData={slackPolicyData}
+        onClose={() => setSlackPolicyData(null)}
+      />
     </>
   );
 });

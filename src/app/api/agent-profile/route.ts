@@ -25,11 +25,16 @@ export async function GET() {
       .from("agent_profiles")
       .select("*")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error("Error fetching profile:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Return null if no profile exists (new user)
+    if (!data) {
+      return NextResponse.json(null);
     }
 
     return NextResponse.json(data);

@@ -53,6 +53,14 @@ export default function AgentProfile() {
       }
 
       const data = await response.json();
+      
+      // Handle null response for new users
+      if (!data) {
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+      
       if (typeof data?.specializations === "string") {
         try {
           data.specializations = JSON.parse(data.specializations);
