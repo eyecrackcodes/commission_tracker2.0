@@ -1,4 +1,4 @@
-import { format, isAfter, isBefore, isEqual, parseISO, startOfDay, endOfDay } from "date-fns";
+import { isAfter, isBefore, isEqual, parseISO, startOfDay, endOfDay } from "date-fns";
 
 export interface CommissionPaymentDate {
   date: string;

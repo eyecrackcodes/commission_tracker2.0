@@ -179,6 +179,7 @@ export default function InsightsDashboard() {
 
     setFilteredPolicies(filtered);
     generateInsights(filtered);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policies, dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
