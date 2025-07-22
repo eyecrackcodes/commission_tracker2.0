@@ -85,12 +85,12 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
         onPolicyUpdate?.();
         
       } else if (action === 'mark_cancelled' && notification.type === 'payment_verification') {
-        // Update policy status to Cancelled and set cancellation date
+        // Update policy status to Cancelled (temporarily without cancelled_date until migration is run)
         const { error } = await supabase
           .from("policies")
           .update({ 
-            policy_status: 'Cancelled',
-            cancelled_date: new Date().toISOString()
+            policy_status: 'Cancelled'
+            // cancelled_date: new Date().toISOString() // Commented out until migration runs
           })
           .eq("id", notification.policyId)
           .eq("user_id", user.id);
@@ -102,12 +102,12 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
         onPolicyUpdate?.();
         
       } else if (action === 'reactivated' && notification.type === 'cancellation_followup') {
-        // Reactivate cancelled policy and clear cancellation date
+        // Reactivate cancelled policy (temporarily without cancelled_date until migration is run)
         const { error } = await supabase
           .from("policies")
           .update({ 
-            policy_status: 'Active',
-            cancelled_date: null
+            policy_status: 'Active'
+            // cancelled_date: null // Commented out until migration runs
           })
           .eq("id", notification.policyId)
           .eq("user_id", user.id);

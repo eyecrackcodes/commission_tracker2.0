@@ -410,12 +410,12 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         date_commission_paid: data.date_commission_paid || null,
         comments: data.comments || null,
         created_at: data.created_at || editingPolicy.created_at,
-        // Set cancelled_date when status changes to Cancelled, clear when changing away from Cancelled
-        cancelled_date: data.policy_status === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled'
-          ? new Date().toISOString()
-          : data.policy_status !== 'Cancelled' && editingPolicy.policy_status === 'Cancelled'
-          ? null
-          : editingPolicy.cancelled_date, // Keep existing value if no status change
+        // Temporarily commented out cancelled_date logic until migration is run
+        // cancelled_date: data.policy_status === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled'
+        //   ? new Date().toISOString()
+        //   : data.policy_status !== 'Cancelled' && editingPolicy.policy_status === 'Cancelled'
+        //   ? null
+        //   : editingPolicy.cancelled_date, // Keep existing value if no status change
       };
 
       // Note: commission_due is a generated column and will be automatically calculated by the database
