@@ -49,9 +49,7 @@ interface FilterOptions {
   searchTerm: string;
 }
 
-interface AgentProfile {
-  start_date: string | null;
-}
+// Removed AgentProfile interface - no longer needed since tenure calculations removed
 
 const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpdate }, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);

@@ -207,6 +207,7 @@ export default function InsightsDashboard() {
       statusDistribution: statusData,
       commissionPayments: generateCommissionPayments(policies),
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange]);
 
   const generateMonthlyCommissions = (policies: Policy[]) => {

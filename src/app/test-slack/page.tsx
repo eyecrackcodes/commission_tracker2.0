@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
+import Image from "next/image";
 import { getBestUserName } from "@/lib/userUtils";
 
 export default function TestSlackPage() {
@@ -58,9 +59,11 @@ export default function TestSlackPage() {
             <h2 className="text-xl font-semibold mb-4">Current User</h2>
             <div className="flex items-center space-x-4">
               {user.imageUrl && (
-                <img 
+                <Image 
                   src={user.imageUrl} 
                   alt={getBestUserName(user)}
+                  width={64}
+                  height={64}
                   className="w-16 h-16 rounded-full"
                 />
               )}

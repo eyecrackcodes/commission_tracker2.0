@@ -21,7 +21,6 @@ interface PipelineData {
 }
 
 export default function CommissionPipeline() {
-  const [policies, setPolicies] = useState<Policy[]>([]);
   const [pipelineData, setPipelineData] = useState<PipelineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PipelineData | null>(null);
@@ -40,7 +39,6 @@ export default function CommissionPipeline() {
       if (error) throw error;
 
       const policiesData = data || [];
-      setPolicies(policiesData);
       generatePipelineData(policiesData);
     } catch (err) {
       console.error("Error fetching policies:", err);
