@@ -19,6 +19,7 @@ import { format, parseISO } from "date-fns";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
+  viewPolicy: (policyId: number) => void;
 }
 
 interface PolicyTableProps {
@@ -106,8 +107,17 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     }
   }, [editCarrierValue, editingPolicy, setValue]);
 
+  const viewPolicy = useCallback((policyId: number) => {
+    const policy = policies.find(p => p.id === policyId);
+    if (policy) {
+      handleEdit(policy);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [policies]);
+
   useImperativeHandle(ref, () => ({
     fetchPolicies,
+    viewPolicy,
   }));
 
   const fetchPolicies = useCallback(async () => {
@@ -401,6 +411,12 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         date_commission_paid: data.date_commission_paid || null,
         comments: data.comments || null,
         created_at: data.created_at || editingPolicy.created_at,
+        // Temporarily commented out cancelled_date logic until migration is run
+        // cancelled_date: data.policy_status === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled'
+        //   ? new Date().toISOString()
+        //   : data.policy_status !== 'Cancelled' && editingPolicy.policy_status === 'Cancelled'
+        //   ? null
+        //   : editingPolicy.cancelled_date, // Keep existing value if no status change
       };
 
       // Note: commission_due is a generated column and will be automatically calculated by the database
@@ -1017,7 +1033,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                   scope="col"
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
-                  Payment Period
+                  Payment Status
                 </th>
                 <th
                   scope="col"
@@ -1375,7 +1391,8 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Date Commission Paid
+                        Date Verified
+                        <span className="text-xs text-gray-500 ml-2">(When you confirmed commission was paid)</span>
                       </label>
                       <input
                         type="date"

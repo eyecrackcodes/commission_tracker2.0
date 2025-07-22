@@ -43,6 +43,7 @@ export type Policy = {
   date_commission_paid: string | null;
   comments: string | null;
   created_at: string;
+  cancelled_date: string | null;
 };
 
 export type AgentProfile = {

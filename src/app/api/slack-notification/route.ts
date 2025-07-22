@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs";
 import { clerkClient } from "@clerk/nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import { sendPolicyNotification, sendQuickPolicyPost } from "@/lib/slack";
+import { sendQuickPolicyPost } from "@/lib/slack";
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,34 +21,27 @@ export async function POST(request: NextRequest) {
       ? `${user.firstName} ${user.lastName}`
       : user.firstName || user.username || user.emailAddresses[0]?.emailAddress || 'Unknown';
 
-    let result;
-
-    if (type === 'policy_notification') {
-      // Full policy notification
-      result = await sendPolicyNotification({
-        ...data,
-        userName,
-        userEmail: user.emailAddresses[0]?.emailAddress
-      });
-    } else if (type === 'quick_post') {
-      // Quick post with acronym
-      result = await sendQuickPolicyPost(
+    // Only handle quick posts now
+    if (type === 'quick_post') {
+      const result = await sendQuickPolicyPost(
         data.carrier,
         data.product,
         data.premium,
-        data.acronym || 'OCC',
+        data.acronym || 'SALE',
         userName,
         userImageUrl
       );
+
+      if (result) {
+        return NextResponse.json({ success: true });
+      } else {
+        return NextResponse.json({ error: "Failed to send Slack notification" }, { status: 500 });
+      }
     } else {
-      return NextResponse.json({ error: "Invalid notification type" }, { status: 400 });
+      return NextResponse.json({ error: "Only quick_post type is supported" }, { status: 400 });
     }
 
-    if (result) {
-      return NextResponse.json({ success: true });
-    } else {
-      return NextResponse.json({ error: "Failed to send Slack notification" }, { status: 500 });
-    }
+
   } catch (error) {
     console.error("Error in Slack notification API:", error);
     return NextResponse.json(
