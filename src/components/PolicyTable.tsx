@@ -19,6 +19,7 @@ import { format, parseISO } from "date-fns";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
+  viewPolicy: (policyId: number) => void;
 }
 
 interface PolicyTableProps {
@@ -106,8 +107,16 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     }
   }, [editCarrierValue, editingPolicy, setValue]);
 
+  const viewPolicy = useCallback((policyId: number) => {
+    const policy = policies.find(p => p.id === policyId);
+    if (policy) {
+      handleEdit(policy);
+    }
+  }, [policies]);
+
   useImperativeHandle(ref, () => ({
     fetchPolicies,
+    viewPolicy,
   }));
 
   const fetchPolicies = useCallback(async () => {
@@ -401,6 +410,12 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         date_commission_paid: data.date_commission_paid || null,
         comments: data.comments || null,
         created_at: data.created_at || editingPolicy.created_at,
+        // Set cancelled_date when status changes to Cancelled, clear when changing away from Cancelled
+        cancelled_date: data.policy_status === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled'
+          ? new Date().toISOString()
+          : data.policy_status !== 'Cancelled' && editingPolicy.policy_status === 'Cancelled'
+          ? null
+          : editingPolicy.cancelled_date, // Keep existing value if no status change
       };
 
       // Note: commission_due is a generated column and will be automatically calculated by the database

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import PolicyTable from "@/components/PolicyTable";
+import { useState, useCallback, useRef } from "react";
+import PolicyTable, { PolicyTableRef } from "@/components/PolicyTable";
 import AgentProfile from "@/components/AgentProfile";
 import InsightsDashboard from "@/components/InsightsDashboard";
 import CommissionPipeline from "@/components/CommissionPipeline";
@@ -15,9 +15,23 @@ export default function DashboardContent() {
   // Refresh key to trigger re-fetching in other components when policies change
   const [refreshKey, setRefreshKey] = useState(0);
   
+  // Ref to access PolicyTable methods
+  const policyTableRef = useRef<PolicyTableRef>(null);
+  
   const handlePolicyUpdate = useCallback(() => {
     setRefreshKey(prev => prev + 1);
   }, []);
+
+  const handleViewPolicy = useCallback((policyId: number) => {
+    // Switch to policies tab if not already there
+    if (activeTab !== "policies") {
+      setActiveTab("policies");
+    }
+    // Use the ref to view the policy
+    setTimeout(() => {
+      policyTableRef.current?.viewPolicy(policyId);
+    }, 100); // Small delay to ensure tab switch completes
+  }, [activeTab]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -69,10 +83,18 @@ export default function DashboardContent() {
 
       {/* Notification Center - Always visible */}
       <div className="mb-6">
-        <NotificationCenter onPolicyUpdate={handlePolicyUpdate} />
+        <NotificationCenter 
+          onPolicyUpdate={handlePolicyUpdate} 
+          onViewPolicy={handleViewPolicy}
+        />
       </div>
 
-      {activeTab === "policies" && <PolicyTable onPolicyUpdate={handlePolicyUpdate} />}
+      {activeTab === "policies" && (
+        <PolicyTable 
+          ref={policyTableRef}
+          onPolicyUpdate={handlePolicyUpdate} 
+        />
+      )}
       {activeTab === "pipeline" && <CommissionPipeline key={refreshKey} />}
       {activeTab === "insights" && <InsightsDashboard key={refreshKey} />}
       {activeTab === "profile" && <AgentProfile />}

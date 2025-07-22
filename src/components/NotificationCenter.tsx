@@ -15,9 +15,10 @@ import { format, parseISO } from "date-fns";
 
 interface NotificationCenterProps {
   onPolicyUpdate?: () => void;
+  onViewPolicy?: (policyId: number) => void;
 }
 
-export default function NotificationCenter({ onPolicyUpdate }: NotificationCenterProps) {
+export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState<AgentNotification[]>([]);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,11 +84,12 @@ export default function NotificationCenter({ onPolicyUpdate }: NotificationCente
         onPolicyUpdate?.();
         
       } else if (action === 'mark_cancelled' && notification.type === 'payment_verification') {
-        // Update policy status to Cancelled
+        // Update policy status to Cancelled and set cancellation date
         const { error } = await supabase
           .from("policies")
           .update({ 
-            policy_status: 'Cancelled'
+            policy_status: 'Cancelled',
+            cancelled_date: new Date().toISOString()
           })
           .eq("id", notification.policyId)
           .eq("user_id", user.id);
@@ -99,11 +101,12 @@ export default function NotificationCenter({ onPolicyUpdate }: NotificationCente
         onPolicyUpdate?.();
         
       } else if (action === 'reactivated' && notification.type === 'cancellation_followup') {
-        // Reactivate cancelled policy
+        // Reactivate cancelled policy and clear cancellation date
         const { error } = await supabase
           .from("policies")
           .update({ 
-            policy_status: 'Active'
+            policy_status: 'Active',
+            cancelled_date: null
           })
           .eq("id", notification.policyId)
           .eq("user_id", user.id);
@@ -120,8 +123,12 @@ export default function NotificationCenter({ onPolicyUpdate }: NotificationCente
         console.log(`Logged contact attempt for policy ${notification.policyId}`);
         
       } else if (action === 'view_policy') {
-        // Scroll to policy in table or open modal
-        console.log(`Viewing policy ${notification.policyId}`);
+        // Use the provided callback to view policy
+        if (onViewPolicy) {
+          onViewPolicy(notification.policyId);
+        } else {
+          console.log(`Viewing policy ${notification.policyId}`);
+        }
       }
     } catch (err) {
       console.error("Error handling notification action:", err);

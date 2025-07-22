@@ -89,10 +89,16 @@ export function findCancellationFollowUps(policies: Policy[]): CancellationFollo
       return;
     }
 
-    // For this implementation, we'll use the updated_at as cancellation date
-    // In a full implementation, you'd want a dedicated cancelled_date field
-    const cancelledDate = startOfDay(parseISO(policy.created_at)); // Placeholder
+    // Use cancelled_date if available, otherwise fall back to created_at for existing data
+    const cancellationDateStr = policy.cancelled_date || policy.created_at;
+    const cancelledDate = startOfDay(parseISO(cancellationDateStr));
     const daysSinceCancellation = differenceInDays(today, cancelledDate);
+
+    // If using created_at as fallback, only process recent policies (within 7 days)
+    // If using actual cancelled_date, process normally
+    if (!policy.cancelled_date && daysSinceCancellation > 7) {
+      return;
+    }
 
     // Only show notifications for first 3 business days
     if (daysSinceCancellation >= 1 && daysSinceCancellation <= 3) {
