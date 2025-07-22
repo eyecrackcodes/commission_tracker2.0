@@ -63,6 +63,7 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
   ) => {
     if (!user) return;
 
+    console.log(`Processing action: ${action} for notification:`, notification);
     setProcessingAction(notification.id);
 
     try {
@@ -228,7 +229,8 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
                     <div className="text-xs text-gray-600 mb-3">
                       {notification.type === 'payment_verification' && (
                         <span>
-                          First payment due: {format(parseISO(notification.firstPaymentDate), 'MMM d, yyyy')}
+                          First payment: {format(parseISO(notification.firstPaymentDate), 'MMM d, yyyy')} • 
+                          {notification.businessDaysOverdue} business days overdue
                         </span>
                       )}
                       {notification.type === 'cancellation_followup' && (

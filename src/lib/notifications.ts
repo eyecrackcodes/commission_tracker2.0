@@ -1,15 +1,17 @@
 import { Policy } from "./supabase";
 import { parseISO, differenceInDays, format, isAfter, startOfDay } from "date-fns";
+import { isBankConfirmationDue, getBusinessDaysOverdue, getBankConfirmationText } from "./businessDays";
 
 export interface PaymentVerificationNotification {
   id: string;
   policyId: number;
   clientName: string;
   firstPaymentDate: string;
-  daysOverdue: number;
+  businessDaysOverdue: number;
   priority: 'high' | 'medium' | 'low';
   type: 'payment_verification';
   createdAt: string;
+  confirmationText: string;
 }
 
 export interface CancellationFollowUpNotification {
@@ -34,7 +36,7 @@ export function generateNotificationId(policyId: number, type: string): string {
 
 // Check for policies needing payment verification
 export function findPendingPaymentVerifications(policies: Policy[]): PaymentVerificationNotification[] {
-  const today = startOfDay(new Date());
+  const today = new Date();
   const notifications: PaymentVerificationNotification[] = [];
 
   policies.forEach(policy => {
@@ -43,38 +45,40 @@ export function findPendingPaymentVerifications(policies: Policy[]): PaymentVeri
       return;
     }
 
-    const firstPaymentDate = startOfDay(parseISO(policy.first_payment_date));
+    const firstPaymentDate = parseISO(policy.first_payment_date);
     
-    // Check if first payment date is today or in the past
-    if (!isAfter(firstPaymentDate, today)) {
-      const daysOverdue = differenceInDays(today, firstPaymentDate);
+    // Check if bank confirmation period has passed (2+ business days)
+    if (isBankConfirmationDue(firstPaymentDate, today)) {
+      const businessDaysOverdue = getBusinessDaysOverdue(firstPaymentDate, today);
+      const confirmationText = getBankConfirmationText(firstPaymentDate, today);
       
-      // Determine priority based on how overdue
+      // Determine priority based on business days overdue
       let priority: 'high' | 'medium' | 'low' = 'medium';
-      if (daysOverdue >= 7) priority = 'high';
-      else if (daysOverdue >= 3) priority = 'medium';
-      else priority = 'low';
+      if (businessDaysOverdue >= 5) priority = 'high';      // 1+ weeks overdue
+      else if (businessDaysOverdue >= 2) priority = 'medium'; // 2+ days overdue  
+      else priority = 'low';                                  // Just became due
 
       notifications.push({
         id: generateNotificationId(policy.id, 'payment_verification'),
         policyId: policy.id,
         clientName: policy.client,
         firstPaymentDate: policy.first_payment_date,
-        daysOverdue,
+        businessDaysOverdue,
         priority,
         type: 'payment_verification',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        confirmationText
       });
     }
   });
 
   return notifications.sort((a, b) => {
-    // Sort by priority (high first) then by days overdue
+    // Sort by priority (high first) then by business days overdue
     const priorityOrder = { high: 3, medium: 2, low: 1 };
     if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
       return priorityOrder[b.priority] - priorityOrder[a.priority];
     }
-    return b.daysOverdue - a.daysOverdue;
+    return b.businessDaysOverdue - a.businessDaysOverdue;
   });
 }
 
@@ -136,13 +140,7 @@ export function getAgentNotifications(policies: Policy[]): AgentNotification[] {
 // Format notification message
 export function formatNotificationMessage(notification: AgentNotification): string {
   if (notification.type === 'payment_verification') {
-    const daysText = notification.daysOverdue === 0 
-      ? 'today' 
-      : notification.daysOverdue === 1 
-        ? 'yesterday' 
-        : `${notification.daysOverdue} days ago`;
-    
-    return `Payment verification needed for ${notification.clientName} - First payment was due ${daysText}`;
+    return `Bank confirmation needed for ${notification.clientName} - ${notification.confirmationText}`;
   }
   
   if (notification.type === 'cancellation_followup') {
