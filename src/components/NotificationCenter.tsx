@@ -11,6 +11,7 @@ import {
   getNotificationSummary,
   AgentNotification,
 } from "@/lib/notifications";
+import { logContactAttempt } from "@/lib/contactTracking";
 import { format, parseISO } from "date-fns";
 
 interface NotificationCenterProps {
@@ -47,8 +48,8 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
       const policiesData = data || [];
       setPolicies(policiesData);
       
-      // Generate notifications
-      const agentNotifications = getAgentNotifications(policiesData);
+      // Generate notifications with user ID for contact tracking
+      const agentNotifications = getAgentNotifications(policiesData, user.id);
       setNotifications(agentNotifications);
     } catch (err) {
       console.error("Error fetching policies and notifications:", err);
@@ -119,9 +120,9 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
         onPolicyUpdate?.();
         
       } else if (action === 'logged_contact') {
-        // For now, we'll just refresh. In a full implementation, 
-        // you'd track contact attempts in a separate table
-        console.log(`Logged contact attempt for policy ${notification.policyId}`);
+        // Log the contact attempt and refresh notifications
+        logContactAttempt(notification.policyId, user.id);
+        await fetchPoliciesAndNotifications(); // Refresh to show updated contact status
         
       } else if (action === 'view_policy') {
         // Use the provided callback to view policy
@@ -237,6 +238,12 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
                         <span>
                           Cancelled: {format(parseISO(notification.cancelledDate), 'MMM d, yyyy')} 
                           • Day {notification.followUpDay} of 3
+                          {notification.contactedToday && (
+                            <span className="text-green-600 font-medium"> • ✅ Contacted today</span>
+                          )}
+                          {notification.lastContactDate && !notification.contactedToday && (
+                            <span className="text-blue-600"> • Last contact: {notification.lastContactDate}</span>
+                          )}
                         </span>
                       )}
                     </div>

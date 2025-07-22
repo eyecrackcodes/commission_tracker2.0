@@ -1,6 +1,7 @@
 import { Policy } from "./supabase";
 import { parseISO, differenceInDays, format, isAfter, startOfDay } from "date-fns";
 import { isBankConfirmationDue, getBusinessDaysOverdue, getBankConfirmationText } from "./businessDays";
+import { wasContactedToday, getLastContactDate, getRecentContactCount } from "./contactTracking";
 
 export interface PaymentVerificationNotification {
   id: string;
@@ -25,6 +26,8 @@ export interface CancellationFollowUpNotification {
   type: 'cancellation_followup';
   createdAt: string;
   assignedTo: 'agent' | 'retention_team';
+  contactedToday?: boolean;
+  lastContactDate?: string;
 }
 
 export type AgentNotification = PaymentVerificationNotification | CancellationFollowUpNotification;
@@ -83,7 +86,7 @@ export function findPendingPaymentVerifications(policies: Policy[]): PaymentVeri
 }
 
 // Check for cancelled policies needing follow-up
-export function findCancellationFollowUps(policies: Policy[]): CancellationFollowUpNotification[] {
+export function findCancellationFollowUps(policies: Policy[], userId?: string): CancellationFollowUpNotification[] {
   const today = startOfDay(new Date());
   const notifications: CancellationFollowUpNotification[] = [];
 
@@ -108,6 +111,10 @@ export function findCancellationFollowUps(policies: Policy[]): CancellationFollo
     if (daysSinceCancellation >= 1 && daysSinceCancellation <= 3) {
       const followUpDay = daysSinceCancellation;
       
+      // Check contact tracking if userId is provided
+      const contactedToday = userId ? wasContactedToday(policy.id, userId) : false;
+      const lastContactDate = userId ? getLastContactDate(policy.id, userId) : null;
+      
       notifications.push({
         id: generateNotificationId(policy.id, 'cancellation_followup'),
         policyId: policy.id,
@@ -118,7 +125,9 @@ export function findCancellationFollowUps(policies: Policy[]): CancellationFollo
         priority: followUpDay === 1 ? 'urgent' : 'high',
         type: 'cancellation_followup',
         createdAt: new Date().toISOString(),
-        assignedTo: 'agent'
+        assignedTo: 'agent',
+        contactedToday,
+        lastContactDate: lastContactDate || undefined
       });
     }
   });
@@ -130,9 +139,9 @@ export function findCancellationFollowUps(policies: Policy[]): CancellationFollo
 }
 
 // Get all notifications for an agent
-export function getAgentNotifications(policies: Policy[]): AgentNotification[] {
+export function getAgentNotifications(policies: Policy[], userId?: string): AgentNotification[] {
   const paymentVerifications = findPendingPaymentVerifications(policies);
-  const cancellationFollowUps = findCancellationFollowUps(policies);
+  const cancellationFollowUps = findCancellationFollowUps(policies, userId);
   
   return [...cancellationFollowUps, ...paymentVerifications];
 }
@@ -201,11 +210,19 @@ export function getNotificationActions(notification: AgentNotification): Array<{
   }
   
   if (notification.type === 'cancellation_followup') {
-    return [
-      { label: 'Called Client', action: 'logged_contact', variant: 'primary' },
-      { label: 'Reactivated', action: 'reactivated', variant: 'primary' },
-      { label: 'View Policy', action: 'view_policy', variant: 'secondary' }
-    ];
+    const actions = [];
+    
+    // Change button text if already contacted today
+    if (notification.contactedToday) {
+      actions.push({ label: '✅ Called Today', action: 'logged_contact', variant: 'secondary' as const });
+    } else {
+      actions.push({ label: 'Call Client', action: 'logged_contact', variant: 'primary' as const });
+    }
+    
+    actions.push({ label: 'Reactivated', action: 'reactivated', variant: 'primary' as const });
+    actions.push({ label: 'View Policy', action: 'view_policy', variant: 'secondary' as const });
+    
+    return actions;
   }
   
   return [];
