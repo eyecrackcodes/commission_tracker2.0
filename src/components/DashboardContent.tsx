@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import PolicyTable from "@/components/PolicyTable";
 import AgentProfile from "@/components/AgentProfile";
 import InsightsDashboard from "@/components/InsightsDashboard";
@@ -10,6 +10,13 @@ export default function DashboardContent() {
   const [activeTab, setActiveTab] = useState<
     "policies" | "profile" | "insights" | "pipeline"
   >("policies");
+  
+  // Refresh key to trigger re-fetching in other components when policies change
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  const handlePolicyUpdate = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -59,9 +66,9 @@ export default function DashboardContent() {
         </div>
       </div>
 
-      {activeTab === "policies" && <PolicyTable />}
-      {activeTab === "pipeline" && <CommissionPipeline />}
-      {activeTab === "insights" && <InsightsDashboard />}
+      {activeTab === "policies" && <PolicyTable onPolicyUpdate={handlePolicyUpdate} />}
+      {activeTab === "pipeline" && <CommissionPipeline key={refreshKey} />}
+      {activeTab === "insights" && <InsightsDashboard key={refreshKey} />}
       {activeTab === "profile" && <AgentProfile />}
     </div>
   );

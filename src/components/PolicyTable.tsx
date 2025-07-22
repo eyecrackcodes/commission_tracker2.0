@@ -9,7 +9,7 @@ import {
 } from "react";
 import { supabase, Policy } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
-import { differenceInMonths } from "date-fns";
+// Removed differenceInMonths import - no longer using tenure calculations
 import { useForm } from "react-hook-form";
 import AddPolicyButton from "@/components/AddPolicyButton";
 import SlackNotificationModal from "@/components/SlackNotificationModal";
@@ -19,6 +19,10 @@ import { format, parseISO } from "date-fns";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
+}
+
+interface PolicyTableProps {
+  onPolicyUpdate?: () => void;
 }
 
 interface EditPolicyFormData {
@@ -34,6 +38,7 @@ interface EditPolicyFormData {
   inforce_date: string | null;
   date_commission_paid: string | null;
   comments: string | null;
+  created_at: string;
 }
 
 interface FilterOptions {
@@ -48,7 +53,7 @@ interface AgentProfile {
   start_date: string | null;
 }
 
-const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
+const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpdate }, ref) => {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [filteredPolicies, setFilteredPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,12 +182,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
 
       switch (filters.dateRange) {
         case "month":
-          // Last month: 1st to last day
-          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          // This month: 1st to last day
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
           startDate.setHours(0, 0, 0, 0);
           endDate = new Date(
             now.getFullYear(),
-            now.getMonth(),
+            now.getMonth() + 1,
             0,
             23,
             59,
@@ -195,12 +200,14 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
           });
           break;
         case "quarter":
-          // Last 3 months
-          startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+          // This quarter
+          const currentQuarter = Math.floor(now.getMonth() / 3);
+          const quarterStartMonth = currentQuarter * 3;
+          startDate = new Date(now.getFullYear(), quarterStartMonth, 1);
           startDate.setHours(0, 0, 0, 0);
           endDate = new Date(
             now.getFullYear(),
-            now.getMonth(),
+            quarterStartMonth + 3,
             0,
             23,
             59,
@@ -209,13 +216,13 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
           );
           break;
         case "year":
-          // Last year
-          startDate = new Date(now.getFullYear() - 1, now.getMonth(), 1);
+          // This year
+          startDate = new Date(now.getFullYear(), 0, 1);
           startDate.setHours(0, 0, 0, 0);
           endDate = new Date(
             now.getFullYear(),
-            now.getMonth(),
-            0,
+            11,
+            31,
             23,
             59,
             59,
@@ -240,42 +247,18 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
 
       // Only apply date filter if we have valid dates
       if (startDate && endDate && startDate <= endDate) {
-        console.log("Applying date filter with:", {
-          dateRange: filters.dateRange,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          policiesBeforeFilter: result.length,
-        });
+        if (process.env.NODE_ENV === 'development') {
+          console.log("Applying date filter:", filters.dateRange, "(" + result.length + " policies)");
+        }
 
         result = result.filter((policy) => {
-          // Get the relevant date from the policy
-          let policyDate = null;
-          let dateSource = "";
-
-          // Try to get the most relevant date in order of priority
-          if (policy.first_payment_date) {
-            policyDate = new Date(policy.first_payment_date);
-            dateSource = "first_payment_date";
-          } else if (policy.inforce_date) {
-            policyDate = new Date(policy.inforce_date);
-            dateSource = "inforce_date";
-          } else if (policy.created_at) {
-            policyDate = new Date(policy.created_at);
-            dateSource = "created_at";
-          }
-
-          // If we couldn't get any valid date, exclude the policy
-          if (!policyDate) {
-            console.log("No valid date found for policy:", {
-              policy_number: policy.policy_number,
-              dates: {
-                first_payment_date: policy.first_payment_date,
-                inforce_date: policy.inforce_date,
-                created_at: policy.created_at,
-              },
-            });
+          // Use created_at as the standard date for filtering consistency
+          if (!policy.created_at) {
+            console.warn("Policy missing created_at date:", policy.policy_number);
             return false;
           }
+
+          const policyDate = new Date(policy.created_at);
 
           // Create a new date object for comparison to avoid mutation
           const normalizedPolicyDate = new Date(policyDate);
@@ -285,22 +268,15 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
             normalizedPolicyDate >= startDate &&
             normalizedPolicyDate <= endDate;
 
-          console.log("Policy date check:", {
-            policy_number: policy.policy_number,
-            dateSource,
-            policyDate: normalizedPolicyDate.toISOString(),
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString(),
-            isInRange,
-          });
+          // Removed verbose logging for performance
 
           return isInRange;
         });
 
-        console.log("After date filter count:", result.length);
+        if (process.env.NODE_ENV === 'development') {
+          console.log("After date filter:", result.length + " policies");
+        }
       }
-    } else {
-      console.log("Skipping date filter - showing all time");
     }
 
     // Apply search filter
@@ -313,15 +289,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
           policy.policy_number.toLowerCase().includes(searchLower) ||
           policy.product.toLowerCase().includes(searchLower)
       );
-      console.log("After search filter count:", result.length);
     }
-
-    console.log("Final filtered results:", {
-      totalPolicies: policies.length,
-      filteredCount: result.length,
-      dateRange: filters.dateRange,
-      status: filters.status,
-    });
 
     setFilteredPolicies(result);
     return result;
@@ -413,51 +381,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
     fetchAgentProfile();
   }, []);
 
-  const calculateTenureMonths = () => {
-    try {
-      if (!agentProfile?.start_date) return 0;
-
-      const startDate = new Date(agentProfile.start_date);
-      const today = new Date();
-
-      // Validate dates
-      if (isNaN(startDate.getTime()) || isNaN(today.getTime())) {
-        console.error("Invalid date in tenure calculation");
-        return 0;
-      }
-
-      const months = differenceInMonths(today, startDate);
-      return Math.max(0, months); // Ensure non-negative
-    } catch (error) {
-      console.error("Error calculating tenure months:", error);
-      return 0;
-    }
-  };
-
-  const getTenureBasedCommissionRate = (baseRate: number) => {
-    try {
-      const tenureMonths = calculateTenureMonths();
-
-      // Apply tenure-based commission rate adjustments
-      if (tenureMonths >= 24) {
-        // 2+ years: 10% bonus
-        return baseRate * 1.1;
-      } else if (tenureMonths >= 12) {
-        // 1+ year: 5% bonus
-        return baseRate * 1.05;
-      } else if (tenureMonths >= 6) {
-        // 6+ months: 2% bonus
-        return baseRate * 1.02;
-      }
-
-      // Less than 6 months: base rate
-      return baseRate;
-    } catch (error) {
-      console.error("Error calculating tenure-based commission rate:", error);
-      // Return base rate if there's an error
-      return baseRate;
-    }
-  };
+  // Removed tenure calculation - agents now set their own commission rates
 
   const handleDelete = async (id: number) => {
     if (!user) return;
@@ -472,6 +396,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
       if (error) throw error;
       setPolicies(policies.filter((policy) => policy.id !== id));
       setPolicyToDelete(null); // Close the confirmation dialog
+      
+      // Notify parent component of policy update
+      onPolicyUpdate?.();
     } catch (err) {
       setError("Failed to delete policy");
       console.error("Error deleting policy:", err);
@@ -509,20 +436,12 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
     try {
       setError(null);
       
-      // Convert empty date strings to null and ensure proper data types
-      const baseCommissionRate = Number(data.commission_rate) / 100;
-      const calculatedTenureRate = getTenureBasedCommissionRate(baseCommissionRate);
+      // Convert commission rate from percentage to decimal
+      const commissionRate = Number(data.commission_rate) / 100;
       
-      // Database constraint only allows specific discrete values
-      // Round to the nearest allowed commission rate value
-      const allowedRates = [0.025, 0.05, 0.1, 0.2]; // 2.5%, 5%, 10%, 20%
-      const tenureAdjustedRate = allowedRates.reduce((prev, curr) => {
-        return Math.abs(curr - calculatedTenureRate) < Math.abs(prev - calculatedTenureRate) ? curr : prev;
-      });
-
-      // Validate that we have valid numbers
-      if (isNaN(baseCommissionRate) || isNaN(tenureAdjustedRate)) {
-        throw new Error("Invalid commission rate calculation");
+      // Validate that we have a valid number
+      if (isNaN(commissionRate) || commissionRate < 0 || commissionRate > 1) {
+        throw new Error("Invalid commission rate");
       }
 
       const annualPremium = Number(data.commissionable_annual_premium);
@@ -538,28 +457,21 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
         product: data.product?.trim() || editingPolicy.product,
         policy_status: data.policy_status || editingPolicy.policy_status,
         commissionable_annual_premium: annualPremium,
-        commission_rate: tenureAdjustedRate,
+        commission_rate: commissionRate,
         first_payment_date: data.first_payment_date || null,
         type_of_payment: data.type_of_payment || null,
         inforce_date: data.inforce_date || null,
         date_commission_paid: data.date_commission_paid || null,
         comments: data.comments || null,
+        created_at: data.created_at || editingPolicy.created_at,
       };
 
       // Note: commission_due is a generated column and will be automatically calculated by the database
 
-      // Log the data being sent for debugging
-      console.log("Updating policy with data:", formattedData);
-      console.log("Policy ID:", editingPolicy.id);
-      console.log("User ID:", user.id);
-      console.log("Commission rate calculation:");
-      console.log("- Original form value:", data.commission_rate);
-      console.log("- Base commission rate:", baseCommissionRate);
-      console.log("- Calculated tenure rate:", calculatedTenureRate);
-      console.log("- Final rounded rate:", tenureAdjustedRate);
-      console.log("- Tenure months:", calculateTenureMonths());
-      if (calculatedTenureRate !== tenureAdjustedRate) {
-        console.warn("Commission rate was rounded from", calculatedTenureRate, "to", tenureAdjustedRate, "to match database constraint (only discrete values allowed)");
+      // Development-only logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log("Updating policy with data:", formattedData);
+        console.log("Commission rate:", (commissionRate * 100).toFixed(2) + "%");
       }
 
       const { error } = await supabase
@@ -583,6 +495,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
       reset();
       setEditingCarrier("");
       setEditingProductOptions([]);
+      
+      // Notify parent component of policy update
+      onPolicyUpdate?.();
     } catch (err) {
       console.error("Error updating policy:", err);
       setError(err instanceof Error ? err.message : "Failed to update policy");
@@ -688,9 +603,9 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
   if (policies.length === 0) {
     return (
       <div>
-        <div className="text-center py-12 bg-white rounded-lg shadow">
+        <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50">
           <svg
-            className="mx-auto h-12 w-12 text-gray-400"
+            className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -713,6 +628,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                   setSlackPolicyData(policyData);
                 }
                 fetchPolicies();
+                onPolicyUpdate?.();
               }} 
             />
           </div>
@@ -726,11 +642,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
         {/* Active Policies Card */}
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4 md:p-6">
           <div className="flex items-center">
-            <div className="p-2 md:p-3 rounded-full bg-green-100">
+            <div className="p-2 md:p-3 rounded-full bg-green-100 dark:bg-green-900/30">
               <svg
-                className="h-6 w-6 md:h-8 md:w-8 text-green-600"
+                className="h-6 w-6 md:h-8 md:w-8 text-green-600 dark:text-green-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -744,17 +660,17 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
               </svg>
             </div>
             <div className="ml-3 md:ml-4">
-              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700 dark:text-gray-300">
                 Active Policies
               </h2>
               <div className="mt-1 md:mt-2">
-                <p className="text-xl md:text-3xl font-bold text-gray-900">
+                <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
                   {summaryStats.active.count}
                 </p>
-                <p className="text-xs md:text-sm text-gray-600">
+                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.active.premium.toLocaleString()} in premiums
                 </p>
-                <p className="text-xs md:text-sm text-gray-600">
+                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.active.commission.toFixed(2).toLocaleString()} in
                   commissions
                 </p>
@@ -764,11 +680,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
         </div>
 
         {/* Pending Policies Card */}
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4 md:p-6">
           <div className="flex items-center">
-            <div className="p-2 md:p-3 rounded-full bg-yellow-100">
+            <div className="p-2 md:p-3 rounded-full bg-yellow-100 dark:bg-yellow-900/30">
               <svg
-                className="h-6 w-6 md:h-8 md:w-8 text-yellow-600"
+                className="h-6 w-6 md:h-8 md:w-8 text-yellow-600 dark:text-yellow-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -782,17 +698,17 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
               </svg>
             </div>
             <div className="ml-3 md:ml-4">
-              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700 dark:text-gray-300">
                 Pending Policies
               </h2>
               <div className="mt-1 md:mt-2">
-                <p className="text-xl md:text-3xl font-bold text-gray-900">
+                <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
                   {summaryStats.pending.count}
                 </p>
-                <p className="text-xs md:text-sm text-gray-600">
+                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.pending.premium.toLocaleString()} in premiums
                 </p>
-                <p className="text-xs md:text-sm text-gray-600">
+                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.pending.commission.toFixed(2).toLocaleString()} in
                   commissions
                 </p>
@@ -802,11 +718,11 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
         </div>
 
         {/* Cancelled Policies Card */}
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4 md:p-6">
           <div className="flex items-center">
-            <div className="p-2 md:p-3 rounded-full bg-red-100">
+            <div className="p-2 md:p-3 rounded-full bg-red-100 dark:bg-red-900/30">
               <svg
-                className="h-6 w-6 md:h-8 md:w-8 text-red-600"
+                className="h-6 w-6 md:h-8 md:w-8 text-red-600 dark:text-red-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -820,17 +736,17 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
               </svg>
             </div>
             <div className="ml-3 md:ml-4">
-              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
+              <h2 className="text-sm md:text-lg font-semibold text-gray-700 dark:text-gray-300">
                 Cancelled Policies
               </h2>
               <div className="mt-1 md:mt-2">
-                <p className="text-xl md:text-3xl font-bold text-gray-900">
+                <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
                   {summaryStats.cancelled.count}
                 </p>
-                <p className="text-xs md:text-sm text-gray-600">
+                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.cancelled.premium.toLocaleString()} in premiums
                 </p>
-                <p className="text-xs md:text-sm text-gray-600">
+                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.cancelled.commission.toFixed(2).toLocaleString()} in
                   commissions
                 </p>
@@ -840,36 +756,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
         </div>
       </div>
 
-      {/* Tenure Info Card */}
-      {agentProfile?.start_date && (
-        <div className="bg-white rounded-lg shadow p-4 md:p-6 mb-6 md:mb-8">
-          <div className="flex items-center">
-            <div className="p-2 md:p-3 rounded-full bg-blue-100">
-              <svg
-                className="h-6 w-6 md:h-8 md:w-8 text-blue-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <div className="ml-3 md:ml-4">
-              <h2 className="text-sm md:text-lg font-semibold text-gray-700">
-                Agent Tenure
-              </h2>
-              <p className="text-xl md:text-3xl font-bold text-gray-900">
-                {calculateTenureMonths()} months
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Removed tenure display - agents now control their own commission rates */}
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
@@ -1004,7 +891,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
         {/* Active filters indicator */}
         {(filters.status !== 'all' || filters.dateRange !== 'all' || searchInput) && (
           <div className="mt-4 flex items-center">
-            <span className="text-sm text-gray-600 mr-2">Active filters:</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400 mr-2">Active filters:</span>
             <div className="flex flex-wrap gap-2">
               {filters.status !== 'all' && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -1066,15 +953,16 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
               setSlackPolicyData(policyData);
             }
             fetchPolicies();
+            onPolicyUpdate?.();
           }} 
         />
       </div>
 
       {/* Table */}
-      <div className="bg-white shadow overflow-hidden rounded-lg">
+      <div className="bg-white dark:bg-gray-800 shadow dark:shadow-gray-900/50 overflow-hidden rounded-lg">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th
                   scope="col"
@@ -1202,7 +1090,7 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredPolicies.length === 0 ? (
                 <tr>
                   <td
@@ -1215,16 +1103,16 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
               ) : (
                 sortedAndFilteredPolicies.map((policy) => (
                   <tr key={policy.id}>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       {policy.client}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       {policy.carrier}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       {policy.policy_number}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       {policy.product}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
@@ -1241,10 +1129,10 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                           policy.policy_status.slice(1)}
                       </span>
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       ${policy.commissionable_annual_premium.toLocaleString()}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       ${policy.commission_due.toFixed(2).toLocaleString()}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
@@ -1253,10 +1141,10 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                         if (!policy.date_commission_paid && paymentInfo.paymentDate) {
                           return (
                             <div>
-                              <p className="text-xs font-medium text-gray-900">
+                              <p className="text-xs font-medium text-gray-900 dark:text-gray-100">
                                 {format(parseISO(paymentInfo.paymentDate.date), 'MMM d')}
                               </p>
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
                                 {paymentInfo.daysUntilPayment === 0 
                                   ? 'Today' 
                                   : `${paymentInfo.daysUntilPayment} days`}
@@ -1278,13 +1166,13 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleEdit(policy)}
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => setPolicyToDelete(policy)}
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
                         >
                           Delete
                         </button>
@@ -1312,8 +1200,8 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
 
       {/* Edit Policy Modal */}
       {editingPolicy && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 bg-black dark:bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-gray-900/50 w-full max-w-2xl max-h-[90vh] overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-r from-amber-600 to-amber-700 px-8 py-6">
               <div className="flex items-center justify-between">
@@ -1357,6 +1245,28 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
             {/* Form Content */}
             <div className="p-8 overflow-y-auto max-h-[calc(90vh-180px)]">
               <form onSubmit={handleSubmit(onSubmitEdit)} className="space-y-6">
+                {/* Policy Date Section */}
+                <div className="bg-amber-50 rounded-lg p-6 border-l-4 border-amber-500">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Policy Date
+                  </h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Policy Entry Date
+                      <span className="text-gray-500 text-xs ml-2">(When this policy was created)</span>
+                    </label>
+                    <input
+                      type="date"
+                      {...register("created_at")}
+                      defaultValue={editingPolicy?.created_at ? new Date(editingPolicy.created_at).toISOString().split('T')[0] : ''}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
                 {/* Client Information Section */}
                 <div className="bg-gray-50 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -1583,8 +1493,8 @@ const PolicyTable = forwardRef<PolicyTableRef>((_, ref) => {
 
       {/* Delete Confirmation Modal */}
       {policyToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black dark:bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl dark:shadow-gray-900/50 w-full max-w-md">
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className="bg-red-100 rounded-full p-3 mr-4">

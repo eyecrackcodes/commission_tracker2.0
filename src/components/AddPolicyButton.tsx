@@ -20,6 +20,7 @@ interface PolicyFormData {
   type_of_payment: string;
   inforce_date: string;
   comments: string;
+  created_at: string;
 }
 
 interface AddPolicyButtonProps {
@@ -171,7 +172,7 @@ export default function AddPolicyButton({
           ...data,
           user_id: user.id,
           commission_rate: commissionRate,
-          created_at: new Date().toISOString(),
+          created_at: data.created_at || new Date().toISOString(),
         },
       ]);
 
@@ -268,6 +269,28 @@ export default function AddPolicyButton({
             {/* Form Content */}
             <div className="p-8 overflow-y-auto max-h-[calc(90vh-180px)]">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                {/* Policy Date Section */}
+                <div className="bg-blue-50 rounded-lg p-6 border-l-4 border-blue-500">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Policy Date
+                  </h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Policy Entry Date
+                      <span className="text-gray-500 text-xs ml-2">(When this policy was created - defaults to today)</span>
+                    </label>
+                    <input
+                      type="date"
+                      {...register("created_at")}
+                      defaultValue={new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
                 {/* Client Information Section */}
                 <div className="bg-gray-50 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">

@@ -65,7 +65,6 @@ export async function GET() {
       return NextResponse.json({
         id: null,
         user_id: userId,
-        start_date: null,
         license_number: null,
         specializations: null,
         notes: null,
@@ -103,7 +102,7 @@ export async function POST(request: NextRequest) {
     console.log("Processing POST request for user:", userId);
     const body = await request.json();
     console.log("Request body:", body);
-    const { start_date, license_number, specializations, notes } = body;
+    const { license_number, specializations, notes } = body;
 
     // Process specializations
     let processedSpecializations = null;
@@ -148,7 +147,6 @@ export async function POST(request: NextRequest) {
         const { data, error } = await supabaseClient
           .from("agent_profiles")
           .update({
-            start_date: start_date || null,
             license_number: license_number || null,
             specializations: processedSpecializations
               ? JSON.stringify(processedSpecializations)
@@ -190,7 +188,6 @@ export async function POST(request: NextRequest) {
           .from("agent_profiles")
           .insert({
             user_id: userId,
-            start_date: start_date || null,
             license_number: license_number || null,
             specializations: processedSpecializations
               ? JSON.stringify(processedSpecializations)

@@ -6,7 +6,6 @@ import { useUser } from "@clerk/nextjs";
 interface AgentProfile {
   id?: number | null;
   user_id: string;
-  start_date: string | null;
   license_number: string | null;
   specializations: string[] | null;
   notes: string | null;
@@ -71,7 +70,6 @@ export default function AgentProfile() {
     setSuccessMessage(null);
 
     const formData = new FormData(e.currentTarget);
-    const startDate = formData.get("start_date") as string;
     const licenseNumber = formData.get("license_number") as string;
     const specializationsInput = formData.get("specializations") as string;
     const notes = formData.get("notes") as string;
@@ -91,7 +89,6 @@ export default function AgentProfile() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          start_date: startDate || null,
           license_number: licenseNumber || null,
           specializations: specializations.length > 0 ? specializations : null,
           notes: notes || null,
@@ -205,23 +202,7 @@ export default function AgentProfile() {
             </div>
           ) : isEditing ? (
             <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                <div>
-                  <label
-                    htmlFor="start_date"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Start Date
-                  </label>
-                  <input
-                    type="date"
-                    id="start_date"
-                    name="start_date"
-                    defaultValue={profile?.start_date || ""}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-
+              <div className="grid grid-cols-1 gap-4 md:gap-6">
                 <div>
                   <label
                     htmlFor="license_number"
@@ -295,26 +276,13 @@ export default function AgentProfile() {
             </form>
           ) : (
             <div className="space-y-4 md:space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">
-                    Start Date
-                  </h3>
-                  <p className="mt-1 text-sm md:text-base text-gray-900">
-                    {profile?.start_date
-                      ? new Date(profile.start_date).toLocaleDateString()
-                      : "Not set"}
-                  </p>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">
-                    License Number
-                  </h3>
-                  <p className="mt-1 text-sm md:text-base text-gray-900">
-                    {profile?.license_number || "Not set"}
-                  </p>
-                </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-500">
+                  License Number
+                </h3>
+                <p className="mt-1 text-sm md:text-base text-gray-900">
+                  {profile?.license_number || "Not set"}
+                </p>
               </div>
 
               <div>

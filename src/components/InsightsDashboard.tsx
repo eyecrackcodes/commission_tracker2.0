@@ -103,7 +103,6 @@ export default function InsightsDashboard() {
       if (error) throw error;
 
       setPolicies(data || []);
-      applyDateFilter(data || []);
     } catch (err) {
       console.error("Error fetching policies:", err);
     } finally {
@@ -111,65 +110,82 @@ export default function InsightsDashboard() {
     }
   }, [user]);
 
-  const applyDateFilter = useCallback(
-    (allPolicies: Policy[]) => {
-      let filtered = [...allPolicies];
-      const now = new Date();
-      let startDate: Date | null = null;
-      let endDate: Date | null = null;
+  // Apply date filtering whenever policies or filter criteria change
+  useEffect(() => {
+    let filtered = [...policies];
+    const now = new Date();
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
 
-      switch (dateFilter) {
-        case "month":
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          break;
-        case "quarter":
-          const quarter = Math.floor(now.getMonth() / 3);
-          startDate = new Date(now.getFullYear(), quarter * 3, 1);
-          endDate = new Date(now.getFullYear(), quarter * 3 + 3, 0);
-          break;
-        case "year":
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date(now.getFullYear(), 11, 31);
-          break;
-        case "ytd":
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = now;
-          break;
-        case "custom":
-          if (customStartDate && customEndDate) {
-            startDate = new Date(customStartDate);
-            endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-          }
-          break;
-        default:
-          // "all" - no filtering
-          break;
-      }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('InsightsDashboard: Applying filter', { 
+        dateFilter, 
+        customStartDate, 
+        customEndDate, 
+        totalPolicies: policies.length 
+      });
+    }
 
-      if (startDate && endDate) {
-        filtered = allPolicies.filter((policy) => {
-          const policyDate = new Date(policy.created_at);
-          return policyDate >= startDate && policyDate <= endDate;
-        });
-      }
+    switch (dateFilter) {
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case "quarter":
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        const quarterStartMonth = currentQuarter * 3;
+        startDate = new Date(now.getFullYear(), quarterStartMonth, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), quarterStartMonth + 3, 0, 23, 59, 59, 999);
+        break;
+      case "year":
+        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      case "ytd":
+        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case "custom":
+        if (customStartDate && customEndDate) {
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59, 999);
+        }
+        break;
+      default:
+        // "all" - no filtering
+        break;
+    }
 
-      setFilteredPolicies(filtered);
-      generateInsights(filtered);
-    },
-    [dateFilter, customStartDate, customEndDate]
-  );
+    if (startDate && endDate) {
+      filtered = policies.filter((policy) => {
+        const policyDate = new Date(policy.created_at);
+        return policyDate >= startDate && policyDate <= endDate;
+      });
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('InsightsDashboard: Filter applied', { 
+        startDate: startDate?.toISOString(), 
+        endDate: endDate?.toISOString(), 
+        filteredCount: filtered.length 
+      });
+    }
+
+    setFilteredPolicies(filtered);
+    generateInsights(filtered);
+  }, [policies, dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (user) {
       fetchPolicies();
     }
   }, [user, fetchPolicies]);
-
-  useEffect(() => {
-    applyDateFilter(policies);
-  }, [policies, applyDateFilter]);
 
   const generateInsights = (policies: Policy[]) => {
     // Generate monthly commission data
