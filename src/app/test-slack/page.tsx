@@ -10,19 +10,18 @@ export default function TestSlackPage() {
   const [result, setResult] = useState<string>("");
   const { user } = useUser();
 
-  const testSlackNotification = async (type: 'full' | 'quick') => {
+  const testSlackNotification = async (acronym: string = "TEST") => {
     setLoading(true);
     setResult("");
     
     try {
       const payload = {
-        type: type === 'full' ? 'policy_notification' : 'quick_post',
+        type: 'quick_post',
         data: {
           carrier: "Test Carrier",
           product: "Test Product",
           premium: 1000,
-          acronym: "TEST",
-          userEmail: user?.emailAddresses[0]?.emailAddress,
+          acronym: acronym,
           userName: user ? getBestUserName(user) : "Test User"
         }
       };
@@ -38,7 +37,7 @@ export default function TestSlackPage() {
       const data = await response.json();
       
       if (response.ok) {
-        setResult(`✅ Success! Slack ${type} notification sent.`);
+        setResult(`✅ Success! Slack quick post sent.`);
       } else {
         setResult(`❌ Error: ${data.error || 'Unknown error'}\n${data.details || ''}`);
       }
@@ -76,23 +75,31 @@ export default function TestSlackPage() {
         )}
         
         <div className="bg-white rounded-lg p-6 shadow">
-          <h2 className="text-xl font-semibold mb-4">Test Notifications</h2>
+          <h2 className="text-xl font-semibold mb-4">Test Quick Post</h2>
           
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Test Acronym
+              </label>
+              <input
+                type="text"
+                defaultValue="TEST"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                id="test-acronym"
+                placeholder="Enter test acronym (e.g., WIN, SALE)"
+              />
+            </div>
+            
             <button
-              onClick={() => testSlackNotification('quick')}
+              onClick={() => {
+                const acronym = (document.getElementById('test-acronym') as HTMLInputElement)?.value || 'TEST';
+                testSlackNotification(acronym);
+              }}
               disabled={loading || !user}
               className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               {loading ? 'Sending...' : '⚡ Test Quick Post'}
-            </button>
-            
-            <button
-              onClick={() => testSlackNotification('full')}
-              disabled={loading || !user}
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {loading ? 'Sending...' : '📢 Test Full Notification'}
             </button>
           </div>
           

@@ -31,18 +31,12 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
 
   if (!policyData || !user) return null;
 
-  const sendSlackNotification = async (type: 'full' | 'quick', acronym?: string) => {
+  const sendSlackNotification = async (acronym?: string) => {
     setSlackLoading(true);
     try {
       const payload = {
-        type: type === 'full' ? 'policy_notification' : 'quick_post',
-        data: type === 'full' ? {
-          carrier: policyData.carrier,
-          product: policyData.product,
-          premium: policyData.commissionable_annual_premium,
-          userEmail: getUserEmail(user),
-          userName: getBestUserName(user)
-        } : {
+        type: 'quick_post',
+        data: {
           carrier: policyData.carrier,
           product: policyData.product,
           premium: policyData.commissionable_annual_premium,
@@ -86,7 +80,7 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
         <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
           <h2 className="text-xl font-bold text-white">🎉 Policy Added Successfully!</h2>
           <p className="text-green-100 mt-1">
-            Share this sale on Slack?
+            Share this sale on Slack with a quick post?
           </p>
         </div>
 
@@ -116,38 +110,39 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center space-x-2">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Custom Acronym (optional)
+              </label>
               <input
                 type="text"
                 value={slackAcronym}
                 onChange={(e) => setSlackAcronym(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                placeholder="Enter acronym (e.g., OCC)"
+                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center font-medium"
+                placeholder="Enter acronym (e.g., OCC, WIN, SALE)"
               />
-              <button
-                onClick={() => sendSlackNotification('quick', slackAcronym)}
-                disabled={slackLoading}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {slackLoading ? 'Sending...' : '⚡ Quick Post'}
-              </button>
+              <p className="text-xs text-gray-500 mt-1 text-center">
+                Will post: "{slackAcronym || 'SALE'} - {policyData.carrier} | {policyData.product} | ${policyData.commissionable_annual_premium.toLocaleString()}"
+              </p>
             </div>
 
-            <button
-              onClick={() => sendSlackNotification('full')}
-              disabled={slackLoading}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {slackLoading ? 'Sending...' : '📢 Full Notification'}
-            </button>
-
-            <button
-              onClick={onClose}
-              className="w-full px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-            >
-              Skip Slack Notification
-            </button>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => sendSlackNotification(slackAcronym)}
+                disabled={slackLoading}
+                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {slackLoading ? 'Posting...' : '⚡ Post to Slack'}
+              </button>
+              
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+              >
+                Skip
+              </button>
+            </div>
           </div>
         </div>
       </div>
