@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { supabase, Policy } from "@/lib/supabase";
+import { getNextPaymentDate, getPaymentPeriodForPolicy, calculateExpectedCommissionForPeriod } from "@/lib/commissionCalendar";
 import {
   BarChart,
   Bar,
@@ -18,7 +19,7 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { format, startOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, subMonths, parseISO, differenceInDays } from "date-fns";
 
 interface InsightsData {
   monthlyCommissions: Array<{
@@ -42,6 +43,18 @@ interface InsightsData {
     count: number;
     value: number;
   }>;
+  commissionPayments: {
+    paid: number;
+    unpaid: number;
+    paidCount: number;
+    unpaidCount: number;
+    avgDaysToPayment: number;
+    monthlyPayments: Array<{
+      month: string;
+      amount: number;
+      count: number;
+    }>;
+  };
 }
 
 const COLORS = [
@@ -61,6 +74,14 @@ export default function InsightsDashboard() {
     productMix: [],
     carrierBreakdown: [],
     statusDistribution: [],
+    commissionPayments: {
+      paid: 0,
+      unpaid: 0,
+      paidCount: 0,
+      unpaidCount: 0,
+      avgDaysToPayment: 0,
+      monthlyPayments: [],
+    },
   });
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState(6); // months for forecast
@@ -82,7 +103,6 @@ export default function InsightsDashboard() {
       if (error) throw error;
 
       setPolicies(data || []);
-      applyDateFilter(data || []);
     } catch (err) {
       console.error("Error fetching policies:", err);
     } finally {
@@ -90,65 +110,82 @@ export default function InsightsDashboard() {
     }
   }, [user]);
 
-  const applyDateFilter = useCallback(
-    (allPolicies: Policy[]) => {
-      let filtered = [...allPolicies];
-      const now = new Date();
-      let startDate: Date | null = null;
-      let endDate: Date | null = null;
+  // Apply date filtering whenever policies or filter criteria change
+  useEffect(() => {
+    let filtered = [...policies];
+    const now = new Date();
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
 
-      switch (dateFilter) {
-        case "month":
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-          break;
-        case "quarter":
-          const quarter = Math.floor(now.getMonth() / 3);
-          startDate = new Date(now.getFullYear(), quarter * 3, 1);
-          endDate = new Date(now.getFullYear(), quarter * 3 + 3, 0);
-          break;
-        case "year":
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date(now.getFullYear(), 11, 31);
-          break;
-        case "ytd":
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = now;
-          break;
-        case "custom":
-          if (customStartDate && customEndDate) {
-            startDate = new Date(customStartDate);
-            endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-          }
-          break;
-        default:
-          // "all" - no filtering
-          break;
-      }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('InsightsDashboard: Applying filter', { 
+        dateFilter, 
+        customStartDate, 
+        customEndDate, 
+        totalPolicies: policies.length 
+      });
+    }
 
-      if (startDate && endDate) {
-        filtered = allPolicies.filter((policy) => {
-          const policyDate = new Date(policy.created_at);
-          return policyDate >= startDate && policyDate <= endDate;
-        });
-      }
+    switch (dateFilter) {
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        break;
+      case "quarter":
+        const currentQuarter = Math.floor(now.getMonth() / 3);
+        const quarterStartMonth = currentQuarter * 3;
+        startDate = new Date(now.getFullYear(), quarterStartMonth, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), quarterStartMonth + 3, 0, 23, 59, 59, 999);
+        break;
+      case "year":
+        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        break;
+      case "ytd":
+        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case "custom":
+        if (customStartDate && customEndDate) {
+          startDate = new Date(customStartDate);
+          endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59, 999);
+        }
+        break;
+      default:
+        // "all" - no filtering
+        break;
+    }
 
-      setFilteredPolicies(filtered);
-      generateInsights(filtered);
-    },
-    [dateFilter, customStartDate, customEndDate]
-  );
+    if (startDate && endDate) {
+      filtered = policies.filter((policy) => {
+        const policyDate = new Date(policy.created_at);
+        return policyDate >= startDate && policyDate <= endDate;
+      });
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('InsightsDashboard: Filter applied', { 
+        startDate: startDate?.toISOString(), 
+        endDate: endDate?.toISOString(), 
+        filteredCount: filtered.length 
+      });
+    }
+
+    setFilteredPolicies(filtered);
+    generateInsights(filtered);
+  }, [policies, dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (user) {
       fetchPolicies();
     }
   }, [user, fetchPolicies]);
-
-  useEffect(() => {
-    applyDateFilter(policies);
-  }, [policies, applyDateFilter]);
 
   const generateInsights = (policies: Policy[]) => {
     // Generate monthly commission data
@@ -168,6 +205,7 @@ export default function InsightsDashboard() {
       productMix: productData,
       carrierBreakdown: carrierData,
       statusDistribution: statusData,
+      commissionPayments: generateCommissionPayments(policies),
     });
   };
 
@@ -295,6 +333,91 @@ export default function InsightsDashboard() {
     }));
   };
 
+  const generateCommissionPayments = (policies: Policy[]) => {
+    // Separate paid and unpaid policies
+    const paidPolicies = policies.filter(
+      (p) => p.date_commission_paid && p.date_commission_paid !== null
+    );
+    const unpaidPolicies = policies.filter(
+      (p) => !p.date_commission_paid || p.date_commission_paid === null
+    );
+
+    const paidCount = paidPolicies.length;
+    const unpaidCount = unpaidPolicies.length;
+
+    const totalPaid = paidPolicies.reduce(
+      (sum, p) => sum + p.commission_due,
+      0
+    );
+    const totalUnpaid = unpaidPolicies.reduce(
+      (sum, p) => sum + p.commission_due,
+      0
+    );
+
+    const avgDaysToPayment = paidPolicies.length > 0 ? calculateAvgDaysToPayment(paidPolicies) : 0;
+
+    const monthlyPayments = generateMonthlyPaymentTrends(policies);
+
+    return {
+      paid: Math.round(totalPaid),
+      unpaid: Math.round(totalUnpaid),
+      paidCount,
+      unpaidCount,
+      avgDaysToPayment,
+      monthlyPayments,
+    };
+  };
+
+  const calculateAvgDaysToPayment = (policies: Policy[]) => {
+    const paidPolicies = policies.filter(
+      (p) => p.date_commission_paid && p.date_commission_paid !== null
+    );
+    if (paidPolicies.length === 0) return 0;
+
+    const totalDays = paidPolicies.reduce((sum, p) => {
+      const paidDate = new Date(p.date_commission_paid!);
+      const createdDate = new Date(p.created_at);
+      const diffTime = paidDate.getTime() - createdDate.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return sum + diffDays;
+    }, 0);
+
+    return Math.round(totalDays / paidPolicies.length);
+  };
+
+  const generateMonthlyPaymentTrends = (policies: Policy[]) => {
+    const monthlyMap = new Map<string, { amount: number; count: number }>();
+    const today = new Date();
+
+    for (let i = 0; i < 6; i++) {
+      const monthDate = startOfMonth(subMonths(today, i));
+      const monthStr = format(monthDate, "MMM yyyy");
+
+      const policiesInMonth = policies.filter((policy) => {
+        const policyDate = new Date(policy.created_at);
+        return (
+          policyDate.getMonth() === monthDate.getMonth() &&
+          policyDate.getFullYear() === monthDate.getFullYear()
+        );
+      });
+
+      const paidPoliciesInMonth = policiesInMonth.filter(
+        (p) => p.date_commission_paid && p.date_commission_paid !== null
+      );
+
+      monthlyMap.set(monthStr, {
+        amount: Math.round(paidPoliciesInMonth.reduce((sum, p) => sum + p.commission_due, 0)),
+        count: paidPoliciesInMonth.length,
+      });
+    }
+
+    return Array.from(monthlyMap.entries()).map(([month, data]) => ({
+      month,
+      amount: data.amount,
+      count: data.count,
+    }));
+  };
+
   const totalCommission = filteredPolicies.reduce(
     (sum, p) => sum + p.commission_due,
     0
@@ -303,11 +426,6 @@ export default function InsightsDashboard() {
     (sum, p) => sum + p.commissionable_annual_premium,
     0
   );
-  const avgCommissionRate =
-    filteredPolicies.length > 0
-      ? filteredPolicies.reduce((sum, p) => sum + p.commission_rate, 0) /
-        filteredPolicies.length
-      : 0;
 
   if (loading) {
     return (
@@ -320,10 +438,10 @@ export default function InsightsDashboard() {
   return (
     <div className="space-y-6">
       {/* Date Range Filter */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Date Range:
             </label>
             <select
@@ -366,15 +484,21 @@ export default function InsightsDashboard() {
 
       {/* Header Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-500">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-6">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
             Total Commission
           </h3>
           <p className="text-2xl font-bold text-gray-900 mt-2">
             ${totalCommission.toLocaleString()}
           </p>
           <p className="text-sm text-green-600 mt-1">
-            +{((avgCommissionRate - 0.05) * 100).toFixed(1)}% from base rate
+            {(() => {
+              const paidAmount = filteredPolicies
+                .filter(p => p.date_commission_paid)
+                .reduce((sum, p) => sum + p.commission_due, 0);
+              const paidPercentage = totalCommission > 0 ? (paidAmount / totalCommission) * 100 : 0;
+              return `${paidPercentage.toFixed(0)}% paid`;
+            })()}
           </p>
         </div>
 
@@ -390,12 +514,26 @@ export default function InsightsDashboard() {
 
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-sm font-medium text-gray-500">
-            Avg Commission Rate
+            Next Payment
           </h3>
           <p className="text-2xl font-bold text-gray-900 mt-2">
-            {(avgCommissionRate * 100).toFixed(1)}%
+            {(() => {
+              const nextPayment = getNextPaymentDate();
+              if (!nextPayment) return "N/A";
+              const expectedCommission = calculateExpectedCommissionForPeriod(
+                filteredPolicies,
+                nextPayment.periodEnd
+              );
+              return `$${expectedCommission.expectedAmount.toLocaleString()}`;
+            })()}
           </p>
-          <p className="text-sm text-gray-500 mt-1">Weighted average</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {(() => {
+              const nextPayment = getNextPaymentDate();
+              if (!nextPayment) return "";
+              return format(parseISO(nextPayment.date), "MMM d");
+            })()}
+          </p>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">
@@ -571,6 +709,172 @@ export default function InsightsDashboard() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Pipeline Health Indicator */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <svg className="h-5 w-5 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Pipeline Health
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-3xl font-bold text-yellow-600">
+              {filteredPolicies.filter(p => p.policy_status === 'Pending').length}
+            </div>
+            <div className="text-sm text-gray-600 mt-1">Pending</div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+              <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => p.policy_status === 'Pending').length / filteredPolicies.length) * 100}%` }}></div>
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-green-600">
+              {filteredPolicies.filter(p => p.policy_status === 'Active').length}
+            </div>
+            <div className="text-sm text-gray-600 mt-1">Active</div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+              <div className="bg-green-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => p.policy_status === 'Active').length / filteredPolicies.length) * 100}%` }}></div>
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-blue-600">
+              {filteredPolicies.filter(p => !p.date_commission_paid).length}
+            </div>
+            <div className="text-sm text-gray-600 mt-1">Awaiting Payment</div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+              <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => !p.date_commission_paid).length / filteredPolicies.length) * 100}%` }}></div>
+            </div>
+          </div>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-purple-600">
+              {filteredPolicies.filter(p => p.date_commission_paid).length}
+            </div>
+            <div className="text-sm text-gray-600 mt-1">Paid</div>
+            <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+              <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => p.date_commission_paid).length / filteredPolicies.length) * 100}%` }}></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Commission Payment Analytics */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Commission Payment Analytics
+        </h2>
+        
+        {/* Payment Status Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-green-800">
+                  Paid Commissions
+                </h3>
+                <p className="text-2xl font-bold text-green-900 mt-2">
+                  ${insights.commissionPayments.paid.toLocaleString()}
+                </p>
+                <p className="text-sm text-green-600 mt-1">
+                  {insights.commissionPayments.paidCount} policies
+                </p>
+              </div>
+              <div className="bg-green-200 rounded-full p-3">
+                <svg className="h-6 w-6 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-orange-800">
+                  Unpaid Commissions
+                </h3>
+                <p className="text-2xl font-bold text-orange-900 mt-2">
+                  ${insights.commissionPayments.unpaid.toLocaleString()}
+                </p>
+                <p className="text-sm text-orange-600 mt-1">
+                  {insights.commissionPayments.unpaidCount} policies
+                </p>
+              </div>
+              <div className="bg-orange-200 rounded-full p-3">
+                <svg className="h-6 w-6 text-orange-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-purple-800">
+                  Conversion Rate
+                </h3>
+                <p className="text-2xl font-bold text-purple-900 mt-2">
+                  {(() => {
+                    const pendingCount = filteredPolicies.filter(p => p.policy_status === 'Pending').length;
+                    const activeCount = filteredPolicies.filter(p => p.policy_status === 'Active').length;
+                    const total = pendingCount + activeCount;
+                    if (total === 0) return "0%";
+                    return `${((activeCount / total) * 100).toFixed(0)}%`;
+                  })()}
+                </p>
+                <p className="text-sm text-purple-600 mt-1">
+                  Pending → Active
+                </p>
+              </div>
+              <div className="bg-purple-200 rounded-full p-3">
+                <svg className="h-6 w-6 text-purple-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Progress Bar */}
+        <div className="mb-6">
+          <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <span>Payment Progress</span>
+            <span>{((insights.commissionPayments.paidCount / (insights.commissionPayments.paidCount + insights.commissionPayments.unpaidCount)) * 100).toFixed(1)}% Complete</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div 
+              className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full"
+              style={{ width: `${(insights.commissionPayments.paidCount / (insights.commissionPayments.paidCount + insights.commissionPayments.unpaidCount)) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Monthly Payment Trends Chart */}
+        <div>
+          <h3 className="text-md font-semibold text-gray-800 mb-3">
+            Monthly Payment Trends
+          </h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart data={[...insights.commissionPayments.monthlyPayments].reverse()}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip
+                formatter={(value: number) => `$${value.toLocaleString()}`}
+              />
+              <Area
+                type="monotone"
+                dataKey="amount"
+                stroke="#10B981"
+                fill="#10B981"
+                fillOpacity={0.3}
+                name="Commission Paid"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

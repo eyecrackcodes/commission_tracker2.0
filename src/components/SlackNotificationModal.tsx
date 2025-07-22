@@ -12,10 +12,10 @@ interface PolicyData {
   policy_status: string;
   commissionable_annual_premium: number;
   commission_rate: number;
-  first_payment_date: string;
-  type_of_payment: string;
-  inforce_date: string;
-  comments: string;
+  first_payment_date?: string;
+  type_of_payment?: string;
+  inforce_date?: string;
+  comments?: string;
 }
 
 interface SlackNotificationModalProps {
@@ -91,15 +91,26 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
 
         <div className="p-6">
           <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600 mb-2">Policy Details:</p>
-            <p className="font-semibold">{policyData.carrier} | {policyData.product}</p>
-            <p className="text-lg font-bold text-green-600">
-              {new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                minimumFractionDigits: 2,
-              }).format(policyData.commissionable_annual_premium)}
-            </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">Policy Details:</p>
+                <p className="font-semibold">{policyData.carrier} | {policyData.product}</p>
+                <p className="text-lg font-bold text-green-600">
+                  {new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                  }).format(policyData.commissionable_annual_premium)}
+                </p>
+              </div>
+              {user.imageUrl && (
+                <img 
+                  src={user.imageUrl} 
+                  alt={getBestUserName(user)}
+                  className="w-12 h-12 rounded-full"
+                />
+              )}
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -119,6 +130,14 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
                 {slackLoading ? 'Sending...' : '⚡ Quick Post'}
               </button>
             </div>
+
+            <button
+              onClick={() => sendSlackNotification('full')}
+              disabled={slackLoading}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {slackLoading ? 'Sending...' : '📢 Full Notification'}
+            </button>
 
             <button
               onClick={onClose}

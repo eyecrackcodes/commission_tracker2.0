@@ -39,7 +39,13 @@ export async function GET() {
           .update({ commission_rate: newRate })
           .eq("user_id", profile.user_id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error(
+            `Error updating policies for user ${profile.user_id}:`,
+            updateError
+          );
+          continue;
+        }
 
         updates.push({
           userId: profile.user_id,

@@ -1,36 +1,38 @@
-// Carrier and product configurations
 export interface CarrierProduct {
-  carrier: string;
+  name: string;
   products: string[];
 }
 
 export const carriers: CarrierProduct[] = [
   {
-    carrier: "GTL - Guarantee Trust Life",
-    products: ["Preferred", "Standard", "Graded", "Guaranteed Issue"],
+    name: "GTL",
+    products: ["Luminary Life Preferred", "Luminary Life Standard", "Luminary Life Graded", "Luminary Life Guaranteed Issue"],
   },
   {
-    carrier: "SBLI",
+    name: "Royal Neighbors of America",
+    products: ["Whole Life Graded", "Whole Life GI", "Term"],
+  },
+  {
+    name: "American Amicable",
+    products: ["Senior Choice Immediate", "Senior Choice Graded", "Senior Choice ROP"],
+  },
+  {
+    name: "SBLI",
     products: ["Preferred", "Standard", "Modified"],
   },
   {
-    carrier: "Royal Neighbors of America (RNA)",
-    products: ["Preferred", "Standard", "Graded", "Guaranteed Issue"],
+    name: "Other",
+    products: ["Other"],
   },
-  {
-    carrier: "Custom",
-    products: ["Custom Product"],
-  },
-  // Add more carriers here as needed
 ];
 
-// Helper function to get products for a specific carrier
-export function getProductsByCarrier(carrierName: string): string[] {
-  const carrier = carriers.find((c) => c.carrier === carrierName);
-  return carrier ? carrier.products : [];
+export function getProductOptions(carrier: string): string[] {
+  const carrierData = carriers.find(
+    (c) => c.name.toLowerCase() === carrier.toLowerCase()
+  );
+  return carrierData?.products || ["Other"];
 }
 
-// Get all carrier names for dropdown
-export function getCarrierNames(): string[] {
-  return carriers.map((c) => c.carrier);
-}
+export function getCarrierOptions(): string[] {
+  return carriers.map((c) => c.name);
+} 
