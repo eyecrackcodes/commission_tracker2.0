@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { getBestUserName, getUserEmail } from "@/lib/userUtils";
 import { useUser } from "@clerk/nextjs";
 
@@ -104,9 +105,11 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
                 </p>
               </div>
               {user.imageUrl && (
-                <img 
+                <Image 
                   src={user.imageUrl} 
                   alt={getBestUserName(user)}
+                  width={48}
+                  height={48}
                   className="w-12 h-12 rounded-full"
                 />
               )}

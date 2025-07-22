@@ -63,7 +63,8 @@ async function sendPolicyNotification(
     name: string;
     imageUrl?: string;
   }
-) {
+  ) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const blocks: any[] = [
     {
       type: "section",
@@ -151,7 +152,8 @@ async function sendCommissionRateChangeNotification(
     name: string;
     imageUrl?: string;
   }
-) {
+  ) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const blocks: any[] = [
     {
       type: "section",

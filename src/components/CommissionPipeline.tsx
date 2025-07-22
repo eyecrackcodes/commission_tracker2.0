@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { supabase, Policy } from "@/lib/supabase";
 import { 
   getUpcomingPaymentPeriods, 
   getNextPaymentDate,
   getPreviousPaymentDate,
-  calculateExpectedCommissionForPeriod,
-  getPaymentPeriodForPolicy 
+  calculateExpectedCommissionForPeriod
 } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
 
@@ -22,19 +21,12 @@ interface PipelineData {
 }
 
 export default function CommissionPipeline() {
-  const [policies, setPolicies] = useState<Policy[]>([]);
   const [pipelineData, setPipelineData] = useState<PipelineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PipelineData | null>(null);
   const { user } = useUser();
 
-  useEffect(() => {
-    if (user) {
-      fetchPolicies();
-    }
-  }, [user]);
-
-  const fetchPolicies = async () => {
+  const fetchPolicies = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -47,14 +39,19 @@ export default function CommissionPipeline() {
       if (error) throw error;
 
       const policiesData = data || [];
-      setPolicies(policiesData);
       generatePipelineData(policiesData);
     } catch (err) {
       console.error("Error fetching policies:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchPolicies();
+    }
+  }, [user, fetchPolicies]);
 
   const generatePipelineData = (policies: Policy[]) => {
     const upcomingPeriods = getUpcomingPaymentPeriods(6); // Get next 6 payment periods

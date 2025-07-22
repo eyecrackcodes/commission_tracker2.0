@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { supabase, Policy } from "@/lib/supabase";
-import { getNextPaymentDate, getPaymentPeriodForPolicy, calculateExpectedCommissionForPeriod } from "@/lib/commissionCalendar";
+import { getNextPaymentDate, calculateExpectedCommissionForPeriod } from "@/lib/commissionCalendar";
 import {
   BarChart,
   Bar,
@@ -19,7 +19,7 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { format, startOfMonth, subMonths, parseISO, differenceInDays } from "date-fns";
+import { format, startOfMonth, subMonths, parseISO } from "date-fns";
 
 interface InsightsData {
   monthlyCommissions: Array<{
@@ -179,6 +179,7 @@ export default function InsightsDashboard() {
 
     setFilteredPolicies(filtered);
     generateInsights(filtered);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policies, dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
@@ -187,7 +188,7 @@ export default function InsightsDashboard() {
     }
   }, [user, fetchPolicies]);
 
-  const generateInsights = (policies: Policy[]) => {
+  const generateInsights = useCallback((policies: Policy[]) => {
     // Generate monthly commission data
     const monthlyData = generateMonthlyCommissions(policies);
 
@@ -207,7 +208,8 @@ export default function InsightsDashboard() {
       statusDistribution: statusData,
       commissionPayments: generateCommissionPayments(policies),
     });
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange]);
 
   const generateMonthlyCommissions = (policies: Policy[]) => {
     const months = [];
@@ -626,7 +628,7 @@ export default function InsightsDashboard() {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {insights.productMix.map((entry, index) => (
+                {insights.productMix.map((_, index) => (
                   <Cell
                     key={`cell-${index}`}
                     fill={COLORS[index % COLORS.length]}
