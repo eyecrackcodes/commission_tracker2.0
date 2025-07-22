@@ -422,10 +422,10 @@ export default function InsightsDashboard() {
   return (
     <div className="space-y-6">
       {/* Date Range Filter */}
-      <div className="bg-white rounded-lg shadow p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Date Range:
             </label>
             <select
@@ -468,8 +468,8 @@ export default function InsightsDashboard() {
 
       {/* Header Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-sm font-medium text-gray-500">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-6">
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
             Total Commission
           </h3>
           <p className="text-2xl font-bold text-gray-900 mt-2">

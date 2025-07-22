@@ -14,14 +14,14 @@ export default function DashboardContent() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Commission Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Commission Dashboard</h1>
         <div className="flex space-x-4">
           <button
             onClick={() => setActiveTab("policies")}
             className={`${
               activeTab === "policies"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-700"
+                ? "bg-blue-500 text-white dark:bg-blue-600"
+                : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
             } px-4 py-2 rounded-md transition-colors`}
           >
             Policies
@@ -30,8 +30,8 @@ export default function DashboardContent() {
             onClick={() => setActiveTab("pipeline")}
             className={`${
               activeTab === "pipeline"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-700"
+                ? "bg-blue-500 text-white dark:bg-blue-600"
+                : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
             } px-4 py-2 rounded-md transition-colors`}
           >
             Pipeline
@@ -40,8 +40,8 @@ export default function DashboardContent() {
             onClick={() => setActiveTab("insights")}
             className={`${
               activeTab === "insights"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-700"
+                ? "bg-blue-500 text-white dark:bg-blue-600"
+                : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
             } px-4 py-2 rounded-md transition-colors`}
           >
             Insights
@@ -50,8 +50,8 @@ export default function DashboardContent() {
             onClick={() => setActiveTab("profile")}
             className={`${
               activeTab === "profile"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-200 text-gray-700"
+                ? "bg-blue-500 text-white dark:bg-blue-600"
+                : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
             } px-4 py-2 rounded-md transition-colors`}
           >
             Profile
