@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
-import { supabase, Policy } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import {
   getAgentNotifications,
   formatNotificationMessage,
@@ -21,19 +21,13 @@ interface NotificationCenterProps {
 
 export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState<AgentNotification[]>([]);
-  const [policies, setPolicies] = useState<Policy[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
   const { user } = useUser();
 
-  useEffect(() => {
-    if (user) {
-      fetchPoliciesAndNotifications();
-    }
-  }, [user]);
-
-  const fetchPoliciesAndNotifications = async () => {
+  const fetchPoliciesAndNotifications = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -46,7 +40,7 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
       if (error) throw error;
 
       const policiesData = data || [];
-      setPolicies(policiesData);
+
       
       // Generate notifications with user ID for contact tracking
       const agentNotifications = getAgentNotifications(policiesData, user.id);
@@ -56,7 +50,13 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchPoliciesAndNotifications();
+    }
+  }, [user, fetchPoliciesAndNotifications]);
 
   const handleNotificationAction = async (
     notification: AgentNotification,

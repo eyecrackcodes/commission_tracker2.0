@@ -1,7 +1,7 @@
 import { Policy } from "./supabase";
-import { parseISO, differenceInDays, format, isAfter, startOfDay } from "date-fns";
+import { parseISO, differenceInDays, startOfDay } from "date-fns";
 import { isBankConfirmationDue, getBusinessDaysOverdue, getBankConfirmationText } from "./businessDays";
-import { wasContactedToday, getLastContactDate, getRecentContactCount } from "./contactTracking";
+import { wasContactedToday, getLastContactDate } from "./contactTracking";
 
 export interface PaymentVerificationNotification {
   id: string;
@@ -229,7 +229,7 @@ export function getNotificationActions(notification: AgentNotification): Array<{
 }
 
 // Check if notifications should be shown (business rules)
-export function shouldShowNotification(notification: AgentNotification, userTimezone: string = 'America/New_York'): boolean {
+export function shouldShowNotification(): boolean {
   const now = new Date();
   const currentHour = now.getHours();
   

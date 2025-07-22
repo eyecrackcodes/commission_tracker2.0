@@ -112,6 +112,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     if (policy) {
       handleEdit(policy);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [policies]);
 
   useImperativeHandle(ref, () => ({

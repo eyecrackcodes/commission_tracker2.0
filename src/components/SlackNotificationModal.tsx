@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { getBestUserName, getUserEmail } from "@/lib/userUtils";
+import { getBestUserName } from "@/lib/userUtils";
 import { useUser } from "@clerk/nextjs";
 
 interface PolicyData {
@@ -123,7 +123,7 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
                 placeholder="Enter acronym (e.g., OCC, WIN, SALE)"
               />
               <p className="text-xs text-gray-500 mt-1 text-center">
-                Will post: "{slackAcronym || 'SALE'} - {policyData.carrier} | {policyData.product} | ${policyData.commissionable_annual_premium.toLocaleString()}"
+                Will post: &ldquo;{slackAcronym || 'SALE'} - {policyData.carrier} | {policyData.product} | ${policyData.commissionable_annual_premium.toLocaleString()}&rdquo;
               </p>
             </div>
 

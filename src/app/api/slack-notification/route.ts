@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs";
 import { clerkClient } from "@clerk/nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import { sendPolicyNotification, sendQuickPolicyPost } from "@/lib/slack";
+import { sendQuickPolicyPost } from "@/lib/slack";
 
 export async function POST(request: NextRequest) {
   try {
