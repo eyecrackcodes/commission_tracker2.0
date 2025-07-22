@@ -1017,7 +1017,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                   scope="col"
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
-                  Payment Period
+                  Payment Status
                 </th>
                 <th
                   scope="col"
@@ -1375,7 +1375,8 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Date Commission Paid
+                        Date Verified
+                        <span className="text-xs text-gray-500 ml-2">(When you confirmed commission was paid)</span>
                       </label>
                       <input
                         type="date"
