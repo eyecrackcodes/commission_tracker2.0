@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import { supabase, Policy } from "@/lib/supabase";
 import { 
   getUpcomingPaymentPeriods, 
   getNextPaymentDate,
   getPreviousPaymentDate,
-  calculateExpectedCommissionForPeriod,
-  getPaymentPeriodForPolicy 
+  calculateExpectedCommissionForPeriod
 } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
 
@@ -28,13 +27,7 @@ export default function CommissionPipeline() {
   const [selectedPeriod, setSelectedPeriod] = useState<PipelineData | null>(null);
   const { user } = useUser();
 
-  useEffect(() => {
-    if (user) {
-      fetchPolicies();
-    }
-  }, [user]);
-
-  const fetchPolicies = async () => {
+  const fetchPolicies = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -54,7 +47,13 @@ export default function CommissionPipeline() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchPolicies();
+    }
+  }, [user, fetchPolicies]);
 
   const generatePipelineData = (policies: Policy[]) => {
     const upcomingPeriods = getUpcomingPaymentPeriods(6); // Get next 6 payment periods

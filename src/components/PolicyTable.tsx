@@ -68,7 +68,6 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     searchTerm: "",
   });
   const [searchInput, setSearchInput] = useState("");
-  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [sortField, setSortField] = useState<keyof Policy>("created_at");
   const [editingCarrier, setEditingCarrier] = useState("");
@@ -319,67 +318,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     }
   }, [filters.dateRange]);
 
-  // Fetch agent profile for tenure calculation
-  useEffect(() => {
-    const fetchAgentProfile = async () => {
-      try {
-        console.log("Fetching agent profile...");
-        const response = await fetch("/api/agent-profile");
-
-        console.log("Agent profile response status:", response.status);
-
-        if (response.status === 404) {
-          // If no profile exists, create a default one with today's date
-          const today = new Date().toISOString().split("T")[0];
-          console.log(
-            "No profile found, using default profile with today's date:",
-            today
-          );
-          setAgentProfile({ start_date: today });
-
-          // Create a new profile
-          const createResponse = await fetch("/api/agent-profile", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ start_date: today }),
-          });
-
-          if (!createResponse.ok) {
-            console.error(
-              "Failed to create agent profile:",
-              await createResponse.json()
-            );
-          } else {
-            const newProfile = await createResponse.json();
-            console.log("Created new agent profile:", newProfile);
-            setAgentProfile(newProfile);
-          }
-          return;
-        }
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("Failed to fetch agent profile:", errorData);
-          // Don't block the component - allow it to work without a profile
-          setAgentProfile(null);
-          return;
-        }
-
-        const data = await response.json();
-        console.log("Agent profile fetched successfully:", data);
-        // Handle null response for new users
-        setAgentProfile(data || null);
-      } catch (error) {
-        console.error("Error fetching agent profile:", error);
-        // Don't block the component - allow it to work without a profile
-        setAgentProfile(null);
-      }
-    };
-
-    fetchAgentProfile();
-  }, []);
+  // Removed agent profile fetching - no longer needed since tenure calculations removed
 
   // Removed tenure calculation - agents now set their own commission rates
 

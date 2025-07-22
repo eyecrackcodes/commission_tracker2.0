@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
 // Helper function to parse specializations
-function parseSpecializations(specializations: any): string[] | null {
+function parseSpecializations(specializations: unknown): string[] | null {
   if (!specializations) return null;
   
   if (Array.isArray(specializations)) {
@@ -25,7 +25,7 @@ function parseSpecializations(specializations: any): string[] | null {
     try {
       const parsed = JSON.parse(specializations);
       return Array.isArray(parsed) ? parsed : null;
-    } catch (e) {
+    } catch {
       // If it's not valid JSON, treat it as a comma-separated string
       return specializations.split(',').map(s => s.trim()).filter(Boolean);
     }
