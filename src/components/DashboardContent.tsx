@@ -5,6 +5,7 @@ import PolicyTable from "@/components/PolicyTable";
 import AgentProfile from "@/components/AgentProfile";
 import InsightsDashboard from "@/components/InsightsDashboard";
 import CommissionPipeline from "@/components/CommissionPipeline";
+import NotificationCenter from "@/components/NotificationCenter";
 
 export default function DashboardContent() {
   const [activeTab, setActiveTab] = useState<
@@ -64,6 +65,11 @@ export default function DashboardContent() {
             Profile
           </button>
         </div>
+      </div>
+
+      {/* Notification Center - Always visible */}
+      <div className="mb-6">
+        <NotificationCenter onPolicyUpdate={handlePolicyUpdate} />
       </div>
 
       {activeTab === "policies" && <PolicyTable onPolicyUpdate={handlePolicyUpdate} />}
