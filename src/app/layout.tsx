@@ -18,6 +18,9 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body className={inter.className}>
+          <header className="flex justify-between items-center p-4">
+            <h1>Luminary Life</h1>
+          </header>
           <main className="min-h-screen bg-gray-50">{children}</main>
         </body>
       </html>

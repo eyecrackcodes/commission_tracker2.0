@@ -11,7 +11,7 @@
   "dependencies": {
     "@clerk/clerk-sdk-node": "^4.13.23",
     "@clerk/nextjs": "^4.29.9",
-    "@slack/web-api": "^7.9.1",
+    "@slack/web-api": "^7.9.3",
     "@supabase/supabase-js": "^2.39.8",
     "@types/canvas-confetti": "^1.9.0",
     "canvas-confetti": "^1.9.3",
@@ -22,6 +22,8 @@
     "react-confetti": "^6.4.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.51.0",
+    "react-is": "^19.1.0",
+    "recharts": "^3.0.2",
     "styled-jsx": "^5.1.2",
     "svix": "^1.63.1"
   },
@@ -29,6 +31,7 @@
     "@types/node": "^20.11.28",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
+    "@types/recharts": "^1.8.29",
     "autoprefixer": "^10.4.18",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.25",

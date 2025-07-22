@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
+import { getCarrierOptions, getProductOptions } from "@/lib/carriers";
 
 interface PolicyFormData {
   client: string;
@@ -22,7 +23,7 @@ interface PolicyFormData {
 }
 
 interface AddPolicyButtonProps {
-  onPolicyAdded?: () => void;
+  onPolicyAdded?: (policyData?: PolicyFormData) => void;
 }
 
 interface AgentProfile {
@@ -45,8 +46,23 @@ export default function AddPolicyButton({
   const [showModal, setShowModal] = useState(false);
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { register, handleSubmit, reset } = useForm<PolicyFormData>();
+  const [selectedCarrier, setSelectedCarrier] = useState("");
+  const [productOptions, setProductOptions] = useState<string[]>([]);
+  const { register, handleSubmit, reset, watch, setValue } = useForm<PolicyFormData>();
   const { user } = useUser();
+
+  // Watch carrier changes
+  const carrierValue = watch("carrier");
+
+  useEffect(() => {
+    if (carrierValue) {
+      setSelectedCarrier(carrierValue);
+      const products = getProductOptions(carrierValue);
+      setProductOptions(products);
+      // Reset product selection when carrier changes
+      setValue("product", "");
+    }
+  }, [carrierValue, setValue]);
 
   useEffect(() => {
     const fetchAgentProfile = async () => {
@@ -167,14 +183,23 @@ export default function AddPolicyButton({
       console.log("Policy added successfully");
       setShowModal(false);
       reset();
+      setSelectedCarrier("");
+      setProductOptions([]);
       triggerConfetti();
 
       if (onPolicyAdded) {
-        onPolicyAdded();
+        onPolicyAdded(data);
       }
     } catch (err) {
       console.error("Error adding policy:", err);
     }
+  };
+
+  const handleClose = () => {
+    setShowModal(false);
+    reset();
+    setSelectedCarrier("");
+    setProductOptions([]);
   };
 
   return (
@@ -203,144 +228,258 @@ export default function AddPolicyButton({
       </button>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-8 rounded-lg w-full max-w-2xl">
-            <h2 className="text-2xl font-bold mb-4">Add New Policy</h2>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Client
-                  </label>
-                  <input
-                    {...register("client", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="bg-white/20 rounded-lg p-3 mr-4">
+                    <svg
+                      className="h-6 w-6 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Add New Policy</h2>
+                    <p className="text-blue-100 text-sm mt-1">Fill in the details below to create a new policy</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Carrier
-                  </label>
-                  <input
-                    {...register("carrier", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Policy Number
-                  </label>
-                  <input
-                    {...register("policy_number", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Product
-                  </label>
-                  <input
-                    {...register("product", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Policy Status
-                  </label>
-                  <select
-                    {...register("policy_status", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Active">Active</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Commission Rate
-                  </label>
-                  <select
-                    {...register("commission_rate", { required: true })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    defaultValue={agentProfile?.start_date ? "20" : "5"}
-                  >
-                    <option value="5">5%</option>
-                    <option value="20">20%</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Commissionable Annual Premium
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    {...register("commissionable_annual_premium", {
-                      required: true,
-                      min: 0,
-                      valueAsNumber: true,
-                    })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    First Payment Date
-                  </label>
-                  <input
-                    type="date"
-                    {...register("first_payment_date")}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Type of Payment
-                  </label>
-                  <input
-                    {...register("type_of_payment")}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Inforce Date
-                  </label>
-                  <input
-                    type="date"
-                    {...register("inforce_date")}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Comments
-                </label>
-                <textarea
-                  {...register("comments")}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end space-x-4">
                 <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300"
+                  onClick={handleClose}
+                  className="text-white/80 hover:text-white transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                >
-                  Add Policy
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-            </form>
+            </div>
+            
+            {/* Form Content */}
+            <div className="p-8 overflow-y-auto max-h-[calc(90vh-180px)]">
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                {/* Client Information Section */}
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Client Information
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Client Name
+                      </label>
+                      <input
+                        {...register("client", { required: true })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="Enter client name"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Policy Details Section */}
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Policy Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Carrier
+                      </label>
+                      <select
+                        {...register("carrier", { required: true })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      >
+                        <option value="">Select a carrier</option>
+                        {getCarrierOptions().map((carrier) => (
+                          <option key={carrier} value={carrier}>
+                            {carrier}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Product
+                      </label>
+                      <select
+                        {...register("product", { required: true })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        disabled={!selectedCarrier}
+                      >
+                        <option value="">
+                          {selectedCarrier ? "Select a product" : "Select carrier first"}
+                        </option>
+                        {productOptions.map((product) => (
+                          <option key={product} value={product}>
+                            {product}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Policy Number
+                      </label>
+                      <input
+                        {...register("policy_number", { required: true })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="Enter policy number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Policy Status
+                      </label>
+                      <select
+                        {...register("policy_status", { required: true })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Active">Active</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Financial Information Section */}
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Financial Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Annual Premium
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          {...register("commissionable_annual_premium", {
+                            required: true,
+                            min: 0,
+                            valueAsNumber: true,
+                          })}
+                          className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Commission Rate
+                      </label>
+                      <select
+                        {...register("commission_rate", { required: true })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        defaultValue={agentProfile?.start_date ? "20" : "5"}
+                      >
+                        <option value="5">5%</option>
+                        <option value="20">20%</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dates Section */}
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-5 w-5 mr-2 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Important Dates
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        First Payment Date
+                      </label>
+                      <input
+                        type="date"
+                        {...register("first_payment_date")}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Inforce Date
+                      </label>
+                      <input
+                        type="date"
+                        {...register("inforce_date")}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Type of Payment
+                      </label>
+                      <input
+                        {...register("type_of_payment")}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="e.g., Monthly, Annual"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comments Section */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Comments (Optional)
+                  </label>
+                  <textarea
+                    {...register("comments")}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    rows={3}
+                    placeholder="Add any additional notes or comments..."
+                  />
+                </div>
+
+                {/* Form Actions */}
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="px-6 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center"
+                  >
+                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Policy
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}

@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
-import { differenceInMonths } from "date-fns";
 
 interface AgentProfile {
-  id?: number;
+  id?: number | null;
   user_id: string;
   start_date: string | null;
   license_number: string | null;
@@ -23,18 +22,6 @@ export default function AgentProfile() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const calculateTenureMonths = useCallback(() => {
-    if (!profile?.start_date) return 0;
-    const startDate = new Date(profile.start_date);
-    const today = new Date();
-    return differenceInMonths(today, startDate);
-  }, [profile?.start_date]);
-
-  const getTenureBasedCommissionRate = useCallback(() => {
-    const tenureMonths = calculateTenureMonths();
-    return tenureMonths >= 6 ? 0.2 : 0.05; // 20% after 6 months, 5% before
-  }, [calculateTenureMonths]);
-
   const fetchProfile = useCallback(async () => {
     if (!user) return;
 
@@ -43,19 +30,6 @@ export default function AgentProfile() {
       const response = await fetch("/api/agent-profile");
 
       if (!response.ok) {
-        if (response.status === 404) {
-          // No profile exists yet, this is not an error
-          setProfile({
-            user_id: user.id,
-            start_date: null,
-            license_number: null,
-            specializations: [],
-            notes: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-          return;
-        }
         const errorData = await response
           .json()
           .catch(() => ({ error: "Failed to load profile" }));
@@ -63,20 +37,15 @@ export default function AgentProfile() {
       }
 
       const data = await response.json();
-
-      // Ensure specializations is always an array
-      if (!data.specializations) {
-        data.specializations = [];
-      } else if (typeof data.specializations === "string") {
-        try {
-          data.specializations = JSON.parse(data.specializations);
-        } catch (e) {
-          console.error("Error parsing specializations:", e);
-          data.specializations = [];
+      
+      // Handle the response - it will always have a structure now
+      if (data) {
+        // Ensure specializations is always an array
+        if (!Array.isArray(data.specializations)) {
+          data.specializations = data.specializations ? [data.specializations] : [];
         }
+        setProfile(data);
       }
-
-      setProfile(data);
     } catch (err) {
       console.error("Error fetching profile:", err);
       setError(err instanceof Error ? err.message : "Failed to load profile");
@@ -88,6 +57,8 @@ export default function AgentProfile() {
   useEffect(() => {
     if (user) {
       fetchProfile();
+    } else {
+      setIsLoading(false);
     }
   }, [user, fetchProfile]);
 
@@ -105,12 +76,13 @@ export default function AgentProfile() {
     const specializationsInput = formData.get("specializations") as string;
     const notes = formData.get("notes") as string;
 
+    // Parse specializations from comma-separated string to array
     const specializations = specializationsInput
       ? specializationsInput
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean)
-      : null;
+      : [];
 
     try {
       const response = await fetch("/api/agent-profile", {
@@ -121,7 +93,7 @@ export default function AgentProfile() {
         body: JSON.stringify({
           start_date: startDate || null,
           license_number: licenseNumber || null,
-          specializations,
+          specializations: specializations.length > 0 ? specializations : null,
           notes: notes || null,
         }),
       });
@@ -132,15 +104,9 @@ export default function AgentProfile() {
         throw new Error(responseData.error || "Failed to save profile");
       }
 
-      if (typeof responseData?.specializations === "string") {
-        try {
-          responseData.specializations = JSON.parse(
-            responseData.specializations
-          );
-        } catch (e) {
-          console.error("Error parsing specializations from response:", e);
-          responseData.specializations = [];
-        }
+      // Ensure specializations is an array in the response
+      if (!Array.isArray(responseData.specializations)) {
+        responseData.specializations = responseData.specializations ? [responseData.specializations] : [];
       }
 
       setProfile(responseData);
@@ -171,7 +137,15 @@ export default function AgentProfile() {
     );
   }
 
-  const tenureMonths = calculateTenureMonths();
+  if (!user) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <div className="bg-white shadow overflow-hidden rounded-lg p-6">
+          <p className="text-gray-600 text-center">Please sign in to view your profile.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
@@ -245,7 +219,6 @@ export default function AgentProfile() {
                     name="start_date"
                     defaultValue={profile?.start_date || ""}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    required
                   />
                 </div>
 
@@ -262,7 +235,6 @@ export default function AgentProfile() {
                     name="license_number"
                     defaultValue={profile?.license_number || ""}
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    required
                   />
                 </div>
               </div>
@@ -307,9 +279,10 @@ export default function AgentProfile() {
               <div className="flex justify-end space-x-3">
                 <button
                   type="submit"
-                  className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  disabled={isLoading}
+                  className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Save Profile
+                  {isLoading ? "Saving..." : "Save Profile"}
                 </button>
                 <button
                   type="button"
@@ -349,7 +322,7 @@ export default function AgentProfile() {
                   Specializations
                 </h3>
                 <p className="mt-1 text-sm md:text-base text-gray-900">
-                  {Array.isArray(profile?.specializations)
+                  {Array.isArray(profile?.specializations) && profile.specializations.length > 0
                     ? profile.specializations.join(", ")
                     : "Not set"}
                 </p>
@@ -360,45 +333,6 @@ export default function AgentProfile() {
                 <p className="mt-1 text-sm md:text-base text-gray-900 whitespace-pre-wrap">
                   {profile?.notes || "No notes"}
                 </p>
-              </div>
-
-              <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-md">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg
-                      className="h-5 w-5 text-blue-400"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="text-sm font-medium text-blue-800">
-                      Commission Information
-                    </h3>
-                    <div className="mt-2 text-sm text-blue-700">
-                      <p>Tenure: {tenureMonths} months</p>
-                      <p>
-                        Commission Rate: {getTenureBasedCommissionRate() * 100}%
-                      </p>
-                      {tenureMonths >= 6 ? (
-                        <p className="mt-1 text-xs">
-                          * Increased rate applied (6+ months tenure)
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-xs">
-                          * Base rate applied (under 6 months tenure)
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
               </div>
 
               <div className="flex justify-end">

@@ -13,6 +13,27 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
+// Helper function to parse specializations
+function parseSpecializations(specializations: any): string[] | null {
+  if (!specializations) return null;
+  
+  if (Array.isArray(specializations)) {
+    return specializations;
+  }
+  
+  if (typeof specializations === 'string') {
+    try {
+      const parsed = JSON.parse(specializations);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch (e) {
+      // If it's not valid JSON, treat it as a comma-separated string
+      return specializations.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+  
+  return null;
+}
+
 // GET handler to fetch the agent profile
 export async function GET() {
   try {
@@ -28,42 +49,38 @@ export async function GET() {
       .from("agent_profiles")
       .select("*")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
-    if (error) {
+    if (error && error.code !== "PGRST116") {
       console.error("Error fetching profile:", error);
       return NextResponse.json(
         { error: error.message },
-        { status: error.code === "PGRST116" ? 404 : 500 }
+        { status: 500 }
       );
     }
 
     if (!profile) {
-      console.log("No profile found, attempting to create one");
-      // Try to create a profile if it doesn't exist
-      const { data: newProfile, error: createError } = await supabaseClient
-        .from("agent_profiles")
-        .insert([
-          {
-            user_id: userId,
-            start_date: new Date().toISOString().split("T")[0],
-          },
-        ])
-        .select()
-        .single();
-
-      if (createError) {
-        console.error("Error creating profile:", createError);
-        return NextResponse.json(
-          { error: createError.message },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json(newProfile);
+      console.log("No profile found for user:", userId);
+      // Return a default profile structure instead of 404
+      return NextResponse.json({
+        id: null,
+        user_id: userId,
+        start_date: null,
+        license_number: null,
+        specializations: null,
+        notes: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
     }
 
-    return NextResponse.json(profile);
+    // Parse specializations to ensure it's an array
+    const parsedProfile = {
+      ...profile,
+      specializations: parseSpecializations(profile.specializations)
+    };
+
+    return NextResponse.json(parsedProfile);
   } catch (err) {
     console.error("Error in GET /api/agent-profile:", err);
     return NextResponse.json(
@@ -137,6 +154,7 @@ export async function POST(request: NextRequest) {
               ? JSON.stringify(processedSpecializations)
               : null,
             notes: notes || null,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", existingProfile.id)
           .select()
@@ -178,6 +196,8 @@ export async function POST(request: NextRequest) {
               ? JSON.stringify(processedSpecializations)
               : null,
             notes: notes || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           })
           .select()
           .single();
@@ -206,7 +226,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(result);
+    // Parse specializations in the result to ensure it's an array
+    const parsedResult = {
+      ...result,
+      specializations: parseSpecializations(result.specializations)
+    };
+
+    return NextResponse.json(parsedResult);
   } catch (error) {
     console.error("Error in POST /api/agent-profile:", error);
     return NextResponse.json(
