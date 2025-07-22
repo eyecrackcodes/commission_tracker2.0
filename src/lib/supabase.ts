@@ -12,13 +12,17 @@ export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   {
-    db: {
-      schema: 'public'
-    },
     auth: {
       persistSession: false,
-      autoRefreshToken: false
-    }
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Prefer: "return=representation",
+      },
+    },
   }
 );
 
@@ -39,4 +43,15 @@ export type Policy = {
   date_commission_paid: string | null;
   comments: string | null;
   created_at: string;
+};
+
+export type AgentProfile = {
+  id: number;
+  user_id: string;
+  start_date: string | null;
+  license_number: string | null;
+  specializations: string[] | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 };

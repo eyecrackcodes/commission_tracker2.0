@@ -1,127 +1,110 @@
-# Commission Tracker 2.0
+# Commission Tracker
 
-A modern web application for tracking insurance policy commissions, built with Next.js, Supabase, and Clerk Authentication.
-
-## Live Demo
-
-[Access the live application here](#) <!-- You'll add the Vercel URL once deployed -->
+A web application for insurance agents to track their policies and commissions. Built with Next.js, Clerk for authentication, and Supabase for the database.
 
 ## Features
 
-- Policy management with status tracking (Active, Pending, Cancelled)
-- Commission calculation and tracking
-- Date-based filtering and search functionality
-- Export to CSV functionality
-- Secure authentication with Clerk
-- Real-time data updates with Supabase
-- Sortable columns and detailed statistics
+- User authentication with Clerk
+- Policy management (create, read, update, delete)
+- Commission tracking and calculations
+- Agent profile management
+- Policy filtering and search
+- Export policies to CSV
+- Automatic commission rate adjustments based on agent tenure
+- Slack integration for sharing policy sales
+
+## Commission Rules
+
+- Agents receive 5% commission for the first 6 months of employment
+- Commission rate automatically increases to 20% after 6 months
+- Commission rate changes are tracked automatically
+
+## Slack Integration
+
+The application includes optional Slack integration for sharing policy sales:
+
+- **Full Notifications**: Share detailed policy information including carrier, product, premium, client, and agent details
+- **Quick Posts**: Share abbreviated policy information with custom acronyms (e.g., "OCC - Carrier | Product | $Premium")
+- **Automatic Prompts**: After adding a policy, users are prompted to share on Slack
+- **Configurable**: Set your Slack bot token and channel ID in environment variables
+
+### Setting up Slack Integration
+
+1. Create a Slack app at https://api.slack.com/apps
+2. Add the following OAuth scopes: `chat:write`, `channels:read`
+3. Install the app to your workspace
+4. Copy the Bot User OAuth Token to `SLACK_BOT_TOKEN`
+5. Set your target channel ID in `SLACK_CHANNEL_ID`
+
+### User Name Parsing
+
+The application intelligently parses user names from email addresses when full names aren't available from the authentication provider:
+
+- **Email patterns supported**: 
+  - `john.doe@example.com` → "John Doe"
+  - `mary_jane@example.com` → "Mary Jane"
+  - `john-doe@example.com` → "John Doe"
+  - `anthony@example.com` → "Anthony"
+- **Priority order**: Full Name → First + Last Name → First Name → Parsed from Email → "Unknown Agent"
 
 ## Tech Stack
 
-- **Frontend**: Next.js, React, Tailwind CSS
-- **Backend**: Supabase (PostgreSQL)
-- **Authentication**: Clerk
-- **Styling**: Tailwind CSS
-- **Deployment**: Vercel
+- Next.js 14 (App Router)
+- TypeScript
+- Clerk Authentication
+- Supabase Database
+- Tailwind CSS
 
-## Quick Start for Users
+## Environment Variables
 
-1. Visit the application URL (will be provided after deployment)
-2. Sign up for an account using email or social login
-3. Start adding and managing your policies
-4. Use filters and search to organize your data
-5. Export reports as needed using the CSV export feature
+The following environment variables are required:
 
-## For Developers
+```env
+# Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+CLERK_SECRET_KEY=your_clerk_secret_key
 
-### Local Development
+# Database
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-1. Clone the repository:
-
-```bash
-git clone https://github.com/eyecrackcodes/commission_tracker2.0.git
+# Slack Integration (Optional)
+SLACK_BOT_TOKEN=xoxb-your-slack-bot-token-here
+SLACK_CHANNEL_ID=your_slack_channel_id
 ```
 
+## Deployment on Vercel
+
+1. Fork or clone this repository
+2. Create a new project on Vercel
+3. Connect your repository to Vercel
+4. Add the environment variables in Vercel's project settings
+5. Deploy!
+
+## Local Development
+
+1. Clone the repository
 2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Set up environment variables:
-
-   - Copy `.env.example` to `.env.local`
-   - Fill in your Supabase and Clerk credentials
-
-4. Run the development server:
-
-```bash
-npm run dev
-```
-
-### Deployment
-
-1. **Supabase Setup**
-
-   - Create a new Supabase project
-   - Run the following SQL in the Supabase SQL editor:
-
-   ```sql
-   -- Create policies table
-   CREATE TABLE policies (
-     id SERIAL PRIMARY KEY,
-     user_id TEXT NOT NULL,
-     client TEXT NOT NULL,
-     carrier TEXT NOT NULL,
-     policy_number TEXT NOT NULL,
-     product TEXT NOT NULL,
-     policy_status TEXT NOT NULL DEFAULT 'Pending',
-     commissionable_annual_premium DECIMAL NOT NULL,
-     commission_rate DECIMAL NOT NULL CHECK (commission_rate IN (0.05, 0.20)),
-     commission_due DECIMAL GENERATED ALWAYS AS (commissionable_annual_premium * commission_rate) STORED,
-     first_payment_date DATE,
-     type_of_payment TEXT,
-     inforce_date DATE,
-     date_commission_paid DATE,
-     comments TEXT,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
-   );
-
-   -- Enable Row Level Security
-   ALTER TABLE policies ENABLE ROW LEVEL SECURITY;
-
-   -- Create policy for user access
-   CREATE POLICY "Users can manage their own policies" ON policies
-     FOR ALL TO authenticated
-     USING (auth.uid() = user_id)
-     WITH CHECK (auth.uid() = user_id);
+   ```bash
+   npm install
    ```
+3. Create a `.env.local` file with the required environment variables
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+5. Open [http://localhost:3000](http://localhost:3000)
 
-2. **Clerk Setup**
+## Database Setup
 
-   - Create a new Clerk application
-   - Configure your authentication methods (email, social providers)
-   - Set up the JWT template
-   - Add your Clerk credentials to environment variables
+The application requires a Supabase database with the following tables:
 
-3. **Vercel Deployment**
-   - Fork this repository
-   - Create a new project in Vercel
-   - Connect it to your forked repository
-   - Add your environment variables in Vercel
-   - Deploy!
+- `policies`
+- `agent_profiles`
 
-## Security
+Refer to the SQL scripts in the `supabase` directory for the complete schema.
 
-- All data is protected by Row Level Security in Supabase
-- Each user can only access their own policies
-- Secure authentication handled by Clerk
-- All sensitive operations require authentication
+## Commission Rate Updates
 
-## Support
-
-For support, please create an issue in the GitHub repository or contact the development team.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+The application includes an API endpoint at `/api/update-commission-rates` that checks for and updates commission rates when agents reach their 6-month mark. This endpoint should be called daily using a cron job or similar scheduling service.
