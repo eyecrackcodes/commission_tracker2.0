@@ -57,8 +57,8 @@ export function findPendingPaymentVerifications(policies: Policy[]): PaymentVeri
       
       // Determine priority based on business days overdue
       let priority: 'high' | 'medium' | 'low' = 'medium';
-      if (businessDaysOverdue >= 5) priority = 'high';      // 1+ weeks overdue
-      else if (businessDaysOverdue >= 2) priority = 'medium'; // 2+ days overdue  
+      if (businessDaysOverdue >= 14) priority = 'high';      // 2+ weeks overdue
+      else if (businessDaysOverdue >= 7) priority = 'medium'; // 1+ weeks overdue  
       else priority = 'low';                                  // Just became due
 
       notifications.push({
@@ -107,8 +107,8 @@ export function findCancellationFollowUps(policies: Policy[], userId?: string): 
       return;
     }
 
-    // Only show notifications for first 3 business days
-    if (daysSinceCancellation >= 1 && daysSinceCancellation <= 3) {
+    // Only show notifications for first 7 business days
+    if (daysSinceCancellation >= 1 && daysSinceCancellation <= 7) {
       const followUpDay = daysSinceCancellation;
       
       // Check contact tracking if userId is provided
@@ -153,7 +153,7 @@ export function formatNotificationMessage(notification: AgentNotification): stri
   }
   
   if (notification.type === 'cancellation_followup') {
-    return `Follow-up needed for ${notification.clientName} - Day ${notification.followUpDay} of cancellation retention (you have ${4 - notification.followUpDay} days remaining)`;
+    return `Follow-up needed for ${notification.clientName} - Day ${notification.followUpDay} of cancellation retention (you have ${8 - notification.followUpDay} days remaining)`;
   }
   
   return '';

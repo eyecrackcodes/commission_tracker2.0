@@ -17,9 +17,9 @@ Automated notification system to help agents proactively manage client payment v
 #### Priority Levels:
 | Days Overdue | Priority | Color | Icon |
 |--------------|----------|-------|------|
-| 0-2 days | Low | Blue | 💡 |
-| 3-6 days | Medium | Yellow | ⏰ |
-| 7+ days | High | Orange | ⚠️ |
+| 0-6 days | Low | Blue | 💡 |
+| 7-13 days | Medium | Yellow | ⏰ |
+| 14+ days | High | Orange | ⚠️ |
 
 #### Agent Actions:
 - **Mark Active**: Updates policy status, removes from notifications
@@ -30,16 +30,15 @@ Automated notification system to help agents proactively manage client payment v
 
 #### Trigger Conditions:
 - **Status**: Policy status = "Cancelled"
-- **Timeline**: Days 1-3 after cancellation
-- **Assignment**: Original agent (Days 1-3), Retention team (Day 4+)
-- **Priority**: Urgent (Day 1), High (Days 2-3)
+- **Timeline**: Days 1-7 after cancellation
+- **Assignment**: Original agent (Days 1-7), Retention team (Day 8+)
+- **Priority**: Urgent (Day 1), High (Days 2-7)
 
 #### Follow-Up Workflow:
 ```
 Day 1: 🚨 URGENT - Immediate client contact required
-Day 2: 🔴 HIGH - Second retention attempt
-Day 3: 🔴 HIGH - Final agent attempt
-Day 4+: Retention team takes over (no agent notifications)
+Day 2-7: 🔴 HIGH - Retention attempts
+Day 8+: Retention team takes over (no agent notifications)
 ```
 
 #### Agent Actions:
@@ -82,8 +81,8 @@ Day 4+: Retention team takes over (no agent notifications)
 
 [Expanded View:]
 ┌─ 🚨 Follow-up needed for John Smith
-│   Day 1 of cancellation retention (you have 3 days remaining)
-│   Cancelled: Dec 15, 2024 • Day 1 of 3
+│   Day 1 of cancellation retention (you have 7 days remaining)
+│   Cancelled: Dec 15, 2024 • Day 1 of 7
 │   [Called Client] [Reactivated] [View Policy]
 ├─ ⚠️ Payment verification needed for Mary Johnson  
 │   First payment was due 5 days ago
@@ -113,9 +112,9 @@ Day 4+: Retention team takes over (no agent notifications)
 
 ### Cancellation Follow-Up Process:
 1. **Policy Cancelled**: Notification immediately generated
-2. **3-Day Window**: Agent has exclusive follow-up period
+2. **7-Day Window**: Agent has exclusive follow-up period
 3. **Daily Reminders**: Decreasing urgency countdown
-4. **Handoff**: Retention team takes over after Day 3
+4. **Handoff**: Retention team takes over after Day 7
 
 ## 📈 Business Impact Metrics
 
@@ -161,17 +160,17 @@ if (currentHour < 8 || currentHour > 18) {
 ### Priority Thresholds:
 ```typescript
 let priority = 'medium';
-if (daysOverdue >= 7) priority = 'high';
-else if (daysOverdue >= 3) priority = 'medium';
+if (daysOverdue >= 14) priority = 'high';
+else if (daysOverdue >= 7) priority = 'medium';
 else priority = 'low';
 ```
 
 ### Cancellation Timeline:
 ```typescript
-// Only show agent notifications for first 3 days
-if (daysSinceCancellation >= 1 && daysSinceCancellation <= 3) {
+// Only show agent notifications for first 7 days
+if (daysSinceCancellation >= 1 && daysSinceCancellation <= 7) {
   // Generate notification for agent
-} else if (daysSinceCancellation >= 4) {
+} else if (daysSinceCancellation >= 8) {
   // Retention team handles (no agent notification)
 }
 ```

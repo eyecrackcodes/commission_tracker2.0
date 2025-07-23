@@ -15,7 +15,11 @@ interface PipelineData {
   paymentDate: string;
   periodEnd: string;
   expectedCommission: number;
+  totalCommission: number;
+  paidCommission: number;
   policyCount: number;
+  paidCount: number;
+  unpaidCount: number;
   daysUntilPayment: number;
   policies: Policy[];
 }
@@ -67,7 +71,11 @@ export default function CommissionPipeline() {
         paymentDate: period.date,
         periodEnd: period.periodEnd,
         expectedCommission: periodData.expectedAmount,
+        totalCommission: periodData.totalAmount,
+        paidCommission: periodData.paidAmount,
         policyCount: periodData.policyCount,
+        paidCount: periodData.paidCount,
+        unpaidCount: periodData.unpaidCount,
         daysUntilPayment: Math.max(0, daysUntil),
         policies: periodData.policies as Policy[]
       });
@@ -80,7 +88,9 @@ export default function CommissionPipeline() {
   const previousPayment = getPreviousPaymentDate();
 
   // Calculate total expected commission in pipeline
-  const totalPipelineCommission = pipelineData.reduce((sum, period) => sum + period.expectedCommission, 0);
+  const totalPipelineCommission = pipelineData.reduce((sum, period) => sum + period.totalCommission, 0);
+  const totalPaidCommission = pipelineData.reduce((sum, period) => sum + period.paidCommission, 0);
+  const totalUnpaidCommission = pipelineData.reduce((sum, period) => sum + period.expectedCommission, 0);
   const totalPipelinePolicies = pipelineData.reduce((sum, period) => sum + period.policyCount, 0);
 
   if (loading) {
@@ -96,24 +106,34 @@ export default function CommissionPipeline() {
       {/* Pipeline Summary */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 text-white">
         <h2 className="text-2xl font-bold mb-4">Commission Pipeline</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <p className="text-blue-100 text-sm">Total Expected</p>
             <p className="text-3xl font-bold">${totalPipelineCommission.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-blue-100 text-sm">Unpaid Policies</p>
-            <p className="text-3xl font-bold">{totalPipelinePolicies}</p>
+            <p className="text-blue-100 text-sm">Already Paid</p>
+            <p className="text-2xl font-bold text-green-300">${totalPaidCommission.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-blue-100 text-sm">Next Payment</p>
-            <p className="text-xl font-semibold">
-              {nextPayment ? format(parseISO(nextPayment.date), 'MMM d, yyyy') : 'N/A'}
-            </p>
-            <p className="text-sm text-blue-200">
-              {nextPayment && pipelineData[0] ? `${pipelineData[0].daysUntilPayment} days away` : ''}
-            </p>
+            <p className="text-blue-100 text-sm">Pending Payment</p>
+            <p className="text-2xl font-bold text-yellow-300">${totalUnpaidCommission.toLocaleString()}</p>
           </div>
+          <div>
+            <p className="text-blue-100 text-sm">Total Policies</p>
+            <p className="text-3xl font-bold">{totalPipelinePolicies}</p>
+          </div>
+        </div>
+        
+        {/* Next Payment Info */}
+        <div className="mt-4 text-center">
+          <p className="text-blue-100 text-sm">Next Payment</p>
+          <p className="text-xl font-semibold">
+            {nextPayment ? format(parseISO(nextPayment.date), 'MMM d, yyyy') : 'N/A'}
+          </p>
+          <p className="text-sm text-blue-200">
+            {nextPayment && pipelineData[0] ? `${pipelineData[0].daysUntilPayment} days away` : ''}
+          </p>
         </div>
       </div>
 
@@ -163,11 +183,21 @@ export default function CommissionPipeline() {
                   </span>
                 )}
                 <p className="text-2xl font-bold text-gray-900">
-                  ${period.expectedCommission.toLocaleString()}
+                  ${period.totalCommission.toLocaleString()}
                 </p>
-                <p className="text-sm text-gray-600">
-                  {period.policyCount} {period.policyCount === 1 ? 'policy' : 'policies'}
-                </p>
+                <div className="text-sm text-gray-600">
+                  <p>{period.policyCount} {period.policyCount === 1 ? 'policy' : 'policies'}</p>
+                  {period.paidCount > 0 && (
+                    <p className="text-green-600">
+                      ${period.paidCommission.toLocaleString()} paid ({period.paidCount})
+                    </p>
+                  )}
+                  {period.unpaidCount > 0 && (
+                    <p className="text-blue-600">
+                      ${period.expectedCommission.toLocaleString()} pending ({period.unpaidCount})
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 

@@ -192,7 +192,11 @@ export function calculateExpectedCommissionForPeriod(
   periodEndDate: string
 ): {
   expectedAmount: number;
+  totalAmount: number;
+  paidAmount: number;
   policyCount: number;
+  paidCount: number;
+  unpaidCount: number;
   policies: Array<{ created_at: string; commission_due: number; date_commission_paid: string | null }>;
 } {
   const periodEnd = endOfDay(parseISO(periodEndDate));
@@ -208,20 +212,28 @@ export function calculateExpectedCommissionForPeriod(
     }
   }
   
-  // Filter policies that fall within this period and haven't been paid yet
+  // Filter policies that fall within this period (include both paid and unpaid)
   const periodPolicies = policies.filter(policy => {
     const policyDate = parseISO(policy.created_at);
     const isInPeriod = isAfter(policyDate, periodStart) && (isBefore(policyDate, periodEnd) || isEqual(startOfDay(policyDate), startOfDay(periodEnd)));
-    const isUnpaid = !policy.date_commission_paid;
     
-    return isInPeriod && isUnpaid;
+    return isInPeriod;
   });
   
-  const expectedAmount = periodPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
+  const unpaidPolicies = periodPolicies.filter(policy => !policy.date_commission_paid);
+  const paidPolicies = periodPolicies.filter(policy => policy.date_commission_paid);
+  
+  const expectedAmount = unpaidPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
+  const paidAmount = paidPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
+  const totalAmount = expectedAmount + paidAmount;
   
   return {
     expectedAmount,
+    totalAmount,
+    paidAmount,
     policyCount: periodPolicies.length,
+    paidCount: paidPolicies.length,
+    unpaidCount: unpaidPolicies.length,
     policies: periodPolicies
   };
 } 

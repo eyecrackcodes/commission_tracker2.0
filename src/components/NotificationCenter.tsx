@@ -237,7 +237,7 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
                       {notification.type === 'cancellation_followup' && (
                         <span>
                           Cancelled: {format(parseISO(notification.cancelledDate), 'MMM d, yyyy')} 
-                          • Day {notification.followUpDay} of 3
+                          • Day {notification.followUpDay} of 7
                           {notification.contactedToday && (
                             <span className="text-green-600 font-medium"> • ✅ Contacted today</span>
                           )}
