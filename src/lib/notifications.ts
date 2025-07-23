@@ -57,8 +57,8 @@ export function findPendingPaymentVerifications(policies: Policy[]): PaymentVeri
       
       // Determine priority based on business days overdue
       let priority: 'high' | 'medium' | 'low' = 'medium';
-      if (businessDaysOverdue >= 5) priority = 'high';      // 1+ weeks overdue
-      else if (businessDaysOverdue >= 2) priority = 'medium'; // 2+ days overdue  
+      if (businessDaysOverdue >= 14) priority = 'high';      // 2+ weeks overdue
+      else if (businessDaysOverdue >= 7) priority = 'medium'; // 1+ weeks overdue  
       else priority = 'low';                                  // Just became due
 
       notifications.push({

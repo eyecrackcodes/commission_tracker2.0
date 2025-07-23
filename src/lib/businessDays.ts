@@ -43,19 +43,19 @@ export function getBusinessDaysBetween(startDate: Date, endDate: Date): number {
 
 /**
  * Get the date when bank confirmation should be available
- * (2 business days after the first payment date)
+ * (7 days after the first payment date)
  * @param firstPaymentDate The first payment date
  * @returns Date when bank confirmation should be available
  */
 export function getBankConfirmationDate(firstPaymentDate: Date): Date {
-  return addBusinessDays(firstPaymentDate, 2);
+  return addBusinessDays(firstPaymentDate, 7);
 }
 
 /**
  * Check if bank confirmation period has passed
  * @param firstPaymentDate The first payment date
  * @param currentDate Current date (defaults to today)
- * @returns True if 2+ business days have passed since first payment date
+ * @returns True if 7+ days have passed since first payment date
  */
 export function isBankConfirmationDue(firstPaymentDate: Date, currentDate: Date = new Date()): boolean {
   const confirmationDate = getBankConfirmationDate(firstPaymentDate);

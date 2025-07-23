@@ -17,9 +17,9 @@ Automated notification system to help agents proactively manage client payment v
 #### Priority Levels:
 | Days Overdue | Priority | Color | Icon |
 |--------------|----------|-------|------|
-| 0-2 days | Low | Blue | 💡 |
-| 3-6 days | Medium | Yellow | ⏰ |
-| 7+ days | High | Orange | ⚠️ |
+| 0-6 days | Low | Blue | 💡 |
+| 7-13 days | Medium | Yellow | ⏰ |
+| 14+ days | High | Orange | ⚠️ |
 
 #### Agent Actions:
 - **Mark Active**: Updates policy status, removes from notifications
@@ -160,8 +160,8 @@ if (currentHour < 8 || currentHour > 18) {
 ### Priority Thresholds:
 ```typescript
 let priority = 'medium';
-if (daysOverdue >= 7) priority = 'high';
-else if (daysOverdue >= 3) priority = 'medium';
+if (daysOverdue >= 14) priority = 'high';
+else if (daysOverdue >= 7) priority = 'medium';
 else priority = 'low';
 ```
 
