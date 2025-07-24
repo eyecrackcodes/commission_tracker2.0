@@ -663,16 +663,24 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                 <div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div className="bg-blue-50 rounded-lg p-4">
-                      <p className="text-sm text-blue-700 font-medium">Expected Commission</p>
+                      <p className="text-sm text-blue-700 font-medium">Total Commission</p>
                       <p className="text-2xl font-bold text-blue-900">
-                        ${selectedPeriod.expectedCommission.toLocaleString()}
+                        ${selectedPeriod.totalCommission.toLocaleString()}
                       </p>
+                      <div className="mt-2 text-xs text-blue-600">
+                        <div>Verified: ${selectedPeriod.verifiedCommission.toLocaleString()}</div>
+                        <div>Unverified: ${selectedPeriod.expectedCommission.toLocaleString()}</div>
+                      </div>
                     </div>
                     <div className="bg-green-50 rounded-lg p-4">
                       <p className="text-sm text-green-700 font-medium">Policy Count</p>
                       <p className="text-2xl font-bold text-green-900">
                         {selectedPeriod.policyCount}
                       </p>
+                      <div className="mt-2 text-xs text-green-600">
+                        <div>Verified: {selectedPeriod.verifiedCount}</div>
+                        <div>Unverified: {selectedPeriod.unverifiedCount}</div>
+                      </div>
                     </div>
                     <div className="bg-purple-50 rounded-lg p-4">
                       <p className="text-sm text-purple-700 font-medium">Days Until Payment</p>
@@ -691,6 +699,7 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Carrier</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Verified</th>
                           <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Commission</th>
                         </tr>
                       </thead>
@@ -708,6 +717,17 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                               }`}>
                                 {policy.policy_status}
                               </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-center">
+                              {policy.date_policy_verified ? (
+                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                  ✓ Verified
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                                  Pending
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                               {policy.commission_due.toLocaleString('en-US', {
