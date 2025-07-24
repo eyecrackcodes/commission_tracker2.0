@@ -41,9 +41,7 @@ export async function POST(request: NextRequest) {
     } else if (type === 'reconciliation_alert') {
       // Handle reconciliation discrepancy alerts
       const result = await sendReconciliationAlert(
-        data.discrepancies,
-        userName,
-        userImageUrl
+        data.discrepancies
       );
 
       if (result) {

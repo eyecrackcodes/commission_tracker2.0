@@ -146,21 +146,18 @@ export async function sendQuickPost(
 /**
  * Send Slack notification for reconciliation discrepancies
  */
-export async function sendReconciliationAlert(
-  discrepancies: Array<{
-    policyNumber: string;
-    client: string;
-    carrier: string;
-    commissionAmount: number;
-    issueType: 'verified_missing' | 'payment_delay' | 'cancelled_needs_removal';
-    daysOverdue: number;
-  }>,
-  userName?: string,
-  userImageUrl?: string
-): Promise<boolean> {
+export async function sendReconciliationAlert(discrepancies: Array<{
+  policyId: number;
+  client: string;
+  policyNumber: string;
+  carrier: string;
+  commission: number;
+  reason: string;
+  status?: string;
+}>): Promise<boolean> {
   try {
     if (!process.env.SLACK_BOT_TOKEN) {
-      console.error("Slack configuration missing - SLACK_BOT_TOKEN required");
+      console.error("Slack bot token not configured");
       return false;
     }
 
@@ -171,84 +168,147 @@ export async function sendReconciliationAlert(
       return false;
     }
 
-    const totalAmount = discrepancies.reduce((sum, d) => sum + d.commissionAmount, 0);
+    if (!discrepancies || discrepancies.length === 0) {
+      console.log("No discrepancies to report");
+      return true;
+    }
+
+    // Calculate total commission amount
+    const totalAmount = discrepancies.reduce((sum, disc) => {
+      const amount = Number(disc.commission) || 0;
+      return sum + amount;
+    }, 0);
+
     const formattedTotal = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
       minimumFractionDigits: 2,
     }).format(totalAmount);
 
-    const blocks: SlackBlock[] = [
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const blocks: any[] = [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "🚨 Commission Reconciliation Alert",
+          emoji: true,
+        },
+      },
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `🚨 *Commission Reconciliation Alert*\n\n` +
-                `Found ${discrepancies.length} ${discrepancies.length === 1 ? 'policy' : 'policies'} with discrepancies totaling ${formattedTotal}` +
-                `${userName ? `\n\n🏆 **Agent:** ${userName}` : ''}`,
+          text: `Found *${discrepancies.length}* ${discrepancies.length === 1 ? 'policy' : 'policies'} with discrepancies totaling *${formattedTotal}*`,
         },
-        accessory: userImageUrl
-          ? {
-              type: "image",
-              image_url: userImageUrl,
-              alt_text: userName || "User image",
-            }
-          : undefined,
       },
       {
         type: "divider",
       },
     ];
 
-    // Show first 5 discrepancies
-    discrepancies.slice(0, 5).forEach((discrepancy) => {
-      const formattedAmount = new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-      }).format(discrepancy.commissionAmount);
+    // Group discrepancies by type for better organization
+    const groupedDiscrepancies: {
+      verified_but_not_on_spreadsheet: typeof discrepancies;
+      missing_commission_notification: typeof discrepancies;
+      removal_requests: typeof discrepancies;
+    } = {
+      verified_but_not_on_spreadsheet: [],
+      missing_commission_notification: [],
+      removal_requests: []
+    };
 
-      let issueEmoji = "⚠️";
-      let issueText = "";
-
-      switch (discrepancy.issueType) {
-        case 'verified_missing':
-          issueEmoji = "❌";
-          issueText = `Verified in app but missing from commission spreadsheet (${discrepancy.daysOverdue} days ago)`;
-          break;
-        case 'payment_delay':
-          issueEmoji = "⏰";
-          issueText = `Payment delayed by ${discrepancy.daysOverdue} days`;
-          break;
-        case 'cancelled_needs_removal':
-          issueEmoji = "🚫";
-          issueText = `Cancelled policy needs removal from commission spreadsheet`;
-          break;
+    discrepancies.forEach(disc => {
+      if (disc.reason.startsWith('verified_but_not_on_spreadsheet')) {
+        groupedDiscrepancies.verified_but_not_on_spreadsheet.push(disc);
+      } else if (disc.reason === 'missing_commission_notification') {
+        groupedDiscrepancies.missing_commission_notification.push(disc);
+      } else {
+        // This is a removal request with the reason being the user's explanation
+        groupedDiscrepancies.removal_requests.push(disc);
       }
-
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `${issueEmoji} *${discrepancy.client}* (${discrepancy.policyNumber})\n` +
-                `${discrepancy.carrier} • ${formattedAmount}\n` +
-                `_${issueText}_`,
-        },
-      });
     });
 
-    // Add "and more" message if there are more than 5
-    if (discrepancies.length > 5) {
+    // Add each type of discrepancy
+    if (groupedDiscrepancies.verified_but_not_on_spreadsheet.length > 0) {
       blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `_... and ${discrepancies.length - 5} more ${discrepancies.length - 5 === 1 ? 'policy' : 'policies'}_`,
+          text: `*❌ Verified in App but Missing from Spreadsheet:*`,
         },
+      });
+
+      groupedDiscrepancies.verified_but_not_on_spreadsheet.forEach((disc) => {
+        const formattedAmount = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+        }).format(Number(disc.commission) || 0);
+
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `• *${disc.client}* (${disc.policyNumber})\n   ${disc.carrier} • ${formattedAmount}`,
+          },
+        });
       });
     }
 
-    // Add action suggestion
+    if (groupedDiscrepancies.missing_commission_notification.length > 0) {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*🚨 Agent Reported Missing Commissions:*`,
+        },
+      });
+
+      groupedDiscrepancies.missing_commission_notification.forEach((disc) => {
+        const formattedAmount = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+        }).format(Number(disc.commission) || 0);
+
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `• *${disc.client}* (${disc.policyNumber})\n   ${disc.carrier} • ${formattedAmount}\n   Status: ${disc.status || 'Unknown'}`,
+          },
+        });
+      });
+    }
+
+    if (groupedDiscrepancies.removal_requests.length > 0) {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*📝 Policy Removal Requests:*`,
+        },
+      });
+
+      groupedDiscrepancies.removal_requests.forEach((disc) => {
+        const formattedAmount = new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+        }).format(Number(disc.commission) || 0);
+
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `• *${disc.client}* (${disc.policyNumber})\n   ${disc.carrier} • ${formattedAmount}\n   *Reason:* ${disc.reason}`,
+          },
+        });
+      });
+    }
+
+    // Add action suggestions
     blocks.push(
       {
         type: "divider",
@@ -280,7 +340,7 @@ export async function sendReconciliationAlert(
       return false;
     }
   } catch (error) {
-    console.error("Error sending reconciliation alert:", error);
+    console.error("Error sending reconciliation alert to Slack:", error);
     return false;
   }
 }

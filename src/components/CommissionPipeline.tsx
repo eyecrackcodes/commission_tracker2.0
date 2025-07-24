@@ -418,7 +418,12 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                   {period.policies.slice(0, 3).map((policy, idx) => (
                     <div key={idx} className="flex justify-between text-sm">
                       <span className="text-gray-700">{policy.client} - {policy.carrier}</span>
-                      <span className="font-medium">${policy.commission_due.toFixed(2)}</span>
+                      <span className="font-medium">{policy.commission_due.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}</span>
                     </div>
                   ))}
                   {period.policies.length > 3 && (
@@ -573,7 +578,12 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                               </div>
                               <div className="text-right">
                                 <p className={`text-xl font-semibold ${isChargeback ? 'text-red-600' : 'text-gray-900'}`}>
-                                  ${isChargeback ? '-' : ''}${policy.commission_due.toFixed(2)}
+                                  {isChargeback ? '-' : ''}{policy.commission_due.toLocaleString('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                  })}
                                 </p>
                                 <p className="text-xs text-gray-500">
                                   {(policy.commission_rate * 100).toFixed(0)}% commission
@@ -700,7 +710,12 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                              ${policy.commission_due.toFixed(2)}
+                              {policy.commission_due.toLocaleString('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                              })}
                             </td>
                           </tr>
                         ))}
