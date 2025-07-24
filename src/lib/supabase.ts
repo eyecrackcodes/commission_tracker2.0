@@ -40,7 +40,7 @@ export type Policy = {
   first_payment_date: string | null;
   type_of_payment: string | null;
   inforce_date: string | null;
-  date_commission_paid: string | null;
+  date_policy_verified: string | null;
   comments: string | null;
   created_at: string;
   cancelled_date: string | null;

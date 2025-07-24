@@ -37,7 +37,7 @@ interface EditPolicyFormData {
   first_payment_date: string | null;
   type_of_payment: string | null;
   inforce_date: string | null;
-  date_commission_paid: string | null;
+  date_policy_verified: string | null;
   comments: string | null;
   created_at: string;
 }
@@ -368,7 +368,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     setValue("first_payment_date", policy.first_payment_date || "");
     setValue("type_of_payment", policy.type_of_payment || "");
     setValue("inforce_date", policy.inforce_date || "");
-    setValue("date_commission_paid", policy.date_commission_paid || "");
+    setValue("date_policy_verified", policy.date_policy_verified || "");
     setValue("comments", policy.comments || "");
     
     // Set carrier and product options
@@ -396,19 +396,28 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         throw new Error("Invalid annual premium amount");
       }
 
+      // Determine policy status - if date_policy_verified is being set, automatically make it Active
+      let finalPolicyStatus = data.policy_status || editingPolicy.policy_status;
+      if (data.date_policy_verified && !editingPolicy.date_policy_verified) {
+        finalPolicyStatus = 'Active'; // Automatically set to Active when verified
+      }
+
+      // Check if policy is being cancelled for Slack alert
+      const isBeingCancelled = finalPolicyStatus === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled';
+
       // Format the data for update
       const formattedData = {
         client: data.client?.trim() || editingPolicy.client,
         carrier: data.carrier?.trim() || editingPolicy.carrier,
         policy_number: data.policy_number?.trim() || editingPolicy.policy_number,
         product: data.product?.trim() || editingPolicy.product,
-        policy_status: data.policy_status || editingPolicy.policy_status,
+        policy_status: finalPolicyStatus,
         commissionable_annual_premium: annualPremium,
         commission_rate: commissionRate,
         first_payment_date: data.first_payment_date || null,
         type_of_payment: data.type_of_payment || null,
         inforce_date: data.inforce_date || null,
-        date_commission_paid: data.date_commission_paid || null,
+        date_policy_verified: data.date_policy_verified || null,
         comments: data.comments || null,
         created_at: data.created_at || editingPolicy.created_at,
         // Temporarily commented out cancelled_date logic until migration is run
@@ -440,6 +449,37 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         console.error("Error details:", error.details);
         console.error("Error hint:", error.hint);
         throw error;
+      }
+
+      // Send Slack alert if policy is being cancelled
+      if (isBeingCancelled) {
+        try {
+          const response = await fetch('/api/slack-notification', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'cancellation_alert',
+              data: {
+                policyNumber: editingPolicy.policy_number,
+                client: editingPolicy.client,
+                carrier: editingPolicy.carrier,
+                commissionAmount: editingPolicy.commission_due,
+                cancelledDate: new Date().toISOString()
+              }
+            }),
+          });
+
+          if (response.ok) {
+            console.log('Cancellation alert sent to Slack successfully');
+          } else {
+            console.error('Failed to send cancellation alert to Slack');
+          }
+        } catch (slackError) {
+          console.error('Error sending Slack cancellation alert:', slackError);
+          // Don't fail the policy update if Slack fails
+        }
       }
 
       // Refresh policies
@@ -671,7 +711,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         </div>
 
         {/* Cancelled Policies Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4 md:p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50 p-4 md:p-6 border-l-4 border-red-500">
           <div className="flex items-center">
             <div className="p-2 md:p-3 rounded-full bg-red-100 dark:bg-red-900/30">
               <svg
@@ -688,21 +728,27 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                 />
               </svg>
             </div>
-            <div className="ml-3 md:ml-4">
+            <div className="ml-3 md:ml-4 flex-1">
               <h2 className="text-sm md:text-lg font-semibold text-gray-700 dark:text-gray-300">
                 Cancelled Policies
               </h2>
               <div className="mt-1 md:mt-2">
-                <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100">
+                <p className="text-xl md:text-3xl font-bold text-red-600 dark:text-red-400">
                   {summaryStats.cancelled.count}
                 </p>
                 <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   ${summaryStats.cancelled.premium.toLocaleString()} in premiums
                 </p>
-                <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">
-                  ${summaryStats.cancelled.commission.toFixed(2).toLocaleString()} in
-                  commissions
+                <p className="text-xs md:text-sm font-semibold text-red-600 dark:text-red-400">
+                  ${summaryStats.cancelled.commission.toFixed(2).toLocaleString()} in lost commissions
                 </p>
+                {summaryStats.cancelled.count > 0 && (
+                  <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md">
+                    <p className="text-xs text-red-700 dark:text-red-300 font-medium">
+                      💡 Tip: Follow up quickly on pending policies to prevent cancellations
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1091,7 +1137,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       {(() => {
                         const paymentInfo = getPaymentPeriodForPolicy(policy.created_at);
-                        if (!policy.date_commission_paid && paymentInfo.paymentDate) {
+                        if (!policy.date_policy_verified && paymentInfo.paymentDate) {
                           return (
                             <div>
                               <p className="text-xs font-medium text-gray-900 dark:text-gray-100">
@@ -1104,10 +1150,10 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                               </p>
                             </div>
                           );
-                        } else if (policy.date_commission_paid) {
+                        } else if (policy.date_policy_verified) {
                           return (
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Paid
+                              Verified
                             </span>
                           );
                         } else {
@@ -1392,11 +1438,11 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Date Verified
-                        <span className="text-xs text-gray-500 ml-2">(When you confirmed commission was paid)</span>
+                        <span className="text-xs text-gray-500 ml-2">(When you verified the policy is active - automatically sets status to Active)</span>
                       </label>
                       <input
                         type="date"
-                        {...register("date_commission_paid")}
+                        {...register("date_policy_verified")}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                       />
                     </div>

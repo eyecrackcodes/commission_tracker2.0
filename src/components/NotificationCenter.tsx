@@ -69,12 +69,12 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
 
     try {
       if (action === 'mark_active' && notification.type === 'payment_verification') {
-        // Update policy status to Active
+        // Update policy status to Active and set verification date
         const { error } = await supabase
           .from("policies")
           .update({ 
             policy_status: 'Active',
-            date_commission_paid: null // Clear this since it's now verified as active
+            date_policy_verified: new Date().toISOString() // Set verification date when marking active
           })
           .eq("id", notification.policyId)
           .eq("user_id", user.id);
@@ -97,6 +97,45 @@ export default function NotificationCenter({ onPolicyUpdate, onViewPolicy }: Not
           .eq("user_id", user.id);
 
         if (error) throw error;
+
+        // Send Slack alert for cancelled policy commission removal
+        try {
+          // Find the policy to get details for Slack alert
+          const { data: policyData, error: policyError } = await supabase
+            .from("policies")
+            .select("policy_number, client, carrier, commission_due")
+            .eq("id", notification.policyId)
+            .eq("user_id", user.id)
+            .single();
+
+          if (!policyError && policyData) {
+            const response = await fetch('/api/slack-notification', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                type: 'cancellation_alert',
+                data: {
+                  policyNumber: policyData.policy_number,
+                  client: policyData.client,
+                  carrier: policyData.carrier,
+                  commissionAmount: policyData.commission_due,
+                  cancelledDate: new Date().toISOString()
+                }
+              }),
+            });
+
+            if (response.ok) {
+              console.log('Cancellation alert sent to Slack successfully');
+            } else {
+              console.error('Failed to send cancellation alert to Slack');
+            }
+          }
+        } catch (slackError) {
+          console.error('Error sending Slack cancellation alert:', slackError);
+          // Don't fail the cancellation process if Slack fails
+        }
 
         // Refresh notifications
         await fetchPoliciesAndNotifications();

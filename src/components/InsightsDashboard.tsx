@@ -20,6 +20,8 @@ import {
   AreaChart,
 } from "recharts";
 import { format, startOfMonth, subMonths, parseISO } from "date-fns";
+import { calculateChargebacks, getChargebackAlertLevel } from "@/lib/chargeback";
+import { generateReconciliationSummary, formatAlertMessage } from "@/lib/reconciliation";
 
 interface InsightsData {
   monthlyCommissions: Array<{
@@ -43,11 +45,11 @@ interface InsightsData {
     count: number;
     value: number;
   }>;
-  commissionPayments: {
-    paid: number;
-    unpaid: number;
-    paidCount: number;
-    unpaidCount: number;
+     commissionPayments: {
+     verified: number;
+     unverified: number;
+     verifiedCount: number;
+     unverifiedCount: number;
     avgDaysToPayment: number;
     monthlyPayments: Array<{
       month: string;
@@ -74,11 +76,11 @@ export default function InsightsDashboard() {
     productMix: [],
     carrierBreakdown: [],
     statusDistribution: [],
-    commissionPayments: {
-      paid: 0,
-      unpaid: 0,
-      paidCount: 0,
-      unpaidCount: 0,
+         commissionPayments: {
+       verified: 0,
+       unverified: 0,
+       verifiedCount: 0,
+       unverifiedCount: 0,
       avgDaysToPayment: 0,
       monthlyPayments: [],
     },
@@ -336,55 +338,57 @@ export default function InsightsDashboard() {
   };
 
   const generateCommissionPayments = (policies: Policy[]) => {
-    // Separate paid and unpaid policies
-    const paidPolicies = policies.filter(
-      (p) => p.date_commission_paid && p.date_commission_paid !== null
+    // Filter out cancelled policies first, then separate paid and unpaid
+    const activePolicies = policies.filter(p => p.policy_status !== 'Cancelled');
+    
+    const verifiedPolicies = activePolicies.filter(
+      (p) => p.date_policy_verified && p.date_policy_verified !== null
     );
-    const unpaidPolicies = policies.filter(
-      (p) => !p.date_commission_paid || p.date_commission_paid === null
+    const unverifiedPolicies = activePolicies.filter(
+      (p) => !p.date_policy_verified || p.date_policy_verified === null
     );
 
-    const paidCount = paidPolicies.length;
-    const unpaidCount = unpaidPolicies.length;
+    const verifiedCount = verifiedPolicies.length;
+    const unverifiedCount = unverifiedPolicies.length;
 
-    const totalPaid = paidPolicies.reduce(
+    const totalVerified = verifiedPolicies.reduce(
       (sum, p) => sum + p.commission_due,
       0
     );
-    const totalUnpaid = unpaidPolicies.reduce(
+    const totalUnverified = unverifiedPolicies.reduce(
       (sum, p) => sum + p.commission_due,
       0
     );
 
-    const avgDaysToPayment = paidPolicies.length > 0 ? calculateAvgDaysToPayment(paidPolicies) : 0;
+    const avgDaysToPayment = verifiedPolicies.length > 0 ? calculateAvgDaysToPayment(verifiedPolicies) : 0;
 
-    const monthlyPayments = generateMonthlyPaymentTrends(policies);
+    const monthlyPayments = generateMonthlyPaymentTrends(activePolicies);
 
     return {
-      paid: Math.round(totalPaid),
-      unpaid: Math.round(totalUnpaid),
-      paidCount,
-      unpaidCount,
+      verified: Math.round(totalVerified),
+      unverified: Math.round(totalUnverified),
+      verifiedCount,
+      unverifiedCount,
       avgDaysToPayment,
       monthlyPayments,
     };
   };
 
   const calculateAvgDaysToPayment = (policies: Policy[]) => {
-    const paidPolicies = policies.filter(
-      (p) => p.date_commission_paid && p.date_commission_paid !== null
+    const verifiedPolicies = policies.filter(
+      (p) => p.date_policy_verified && p.date_policy_verified !== null
     );
-    if (paidPolicies.length === 0) return 0;
+    if (verifiedPolicies.length === 0) return 0;
 
-    const totalDays = paidPolicies.reduce((sum, p) => {
-      const paidDate = new Date(p.date_commission_paid!);
+    const totalDays = verifiedPolicies.reduce((sum, p) => {
+      const verifiedDate = new Date(p.date_policy_verified!);
       const createdDate = new Date(p.created_at);
-      const diffTime = paidDate.getTime() - createdDate.getTime();
+      const diffTime = verifiedDate.getTime() - createdDate.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return sum + diffDays;
     }, 0);
 
-    return Math.round(totalDays / paidPolicies.length);
+    return Math.round(totalDays / verifiedPolicies.length);
   };
 
   const generateMonthlyPaymentTrends = (policies: Policy[]) => {
@@ -403,13 +407,13 @@ export default function InsightsDashboard() {
         );
       });
 
-      const paidPoliciesInMonth = policiesInMonth.filter(
-        (p) => p.date_commission_paid && p.date_commission_paid !== null
+      const verifiedPoliciesInMonth = policiesInMonth.filter(
+        (p) => p.date_policy_verified && p.date_policy_verified !== null
       );
 
       monthlyMap.set(monthStr, {
-        amount: Math.round(paidPoliciesInMonth.reduce((sum, p) => sum + p.commission_due, 0)),
-        count: paidPoliciesInMonth.length,
+        amount: Math.round(verifiedPoliciesInMonth.reduce((sum, p) => sum + p.commission_due, 0)),
+        count: verifiedPoliciesInMonth.length,
       });
     }
 
@@ -420,14 +424,24 @@ export default function InsightsDashboard() {
     }));
   };
 
-  const totalCommission = filteredPolicies.reduce(
+  // Calculate totals excluding cancelled policies
+  const activePolicies = filteredPolicies.filter(p => p.policy_status !== 'Cancelled');
+  
+  const totalCommission = activePolicies.reduce(
     (sum, p) => sum + p.commission_due,
     0
   );
-  const totalPremium = filteredPolicies.reduce(
+  const totalPremium = activePolicies.reduce(
     (sum, p) => sum + p.commissionable_annual_premium,
     0
   );
+
+  // Calculate chargeback metrics
+  const chargebackMetrics = calculateChargebacks(filteredPolicies);
+  const chargebackAlert = getChargebackAlertLevel(filteredPolicies);
+
+  // Calculate reconciliation metrics
+  const reconciliationSummary = generateReconciliationSummary(filteredPolicies);
 
   if (loading) {
     return (
@@ -479,10 +493,104 @@ export default function InsightsDashboard() {
           )}
 
           <div className="ml-auto text-sm text-gray-600">
-            Showing {filteredPolicies.length} of {policies.length} policies
+            Showing {activePolicies.length} active of {filteredPolicies.length} filtered policies
           </div>
         </div>
       </div>
+
+      {/* Chargeback Alert */}
+      {chargebackMetrics.totalChargebacks > 0 && (
+        <div className={`rounded-lg p-4 mb-6 ${
+          chargebackAlert.level === 'high' ? 'bg-red-50 border border-red-200' :
+          chargebackAlert.level === 'medium' ? 'bg-yellow-50 border border-yellow-200' :
+          'bg-blue-50 border border-blue-200'
+        }`}>
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className={`h-6 w-6 ${
+                chargebackAlert.level === 'high' ? 'text-red-600' :
+                chargebackAlert.level === 'medium' ? 'text-yellow-600' :
+                'text-blue-600'
+              }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className={`text-sm font-medium ${
+                chargebackAlert.level === 'high' ? 'text-red-800' :
+                chargebackAlert.level === 'medium' ? 'text-yellow-800' :
+                'text-blue-800'
+              }`}>
+                Chargeback Alert
+              </h3>
+              <div className={`mt-2 text-sm ${
+                chargebackAlert.level === 'high' ? 'text-red-700' :
+                chargebackAlert.level === 'medium' ? 'text-yellow-700' :
+                'text-blue-700'
+              }`}>
+                <p>{chargebackAlert.message}</p>
+                <p className="mt-1">
+                  <strong>{chargebackMetrics.totalChargebacks}</strong> policies cancelled within 30 days, 
+                  representing <strong>${chargebackMetrics.chargebackAmount.toFixed(2)}</strong> in lost commission.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reconciliation Alerts */}
+      {reconciliationSummary.alerts.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-orange-800">
+                Reconciliation Issues Detected
+              </h3>
+              <div className="mt-2 text-sm text-orange-700">
+                <p className="mb-3">
+                  Found <strong>{reconciliationSummary.alerts.length}</strong> policies that may need attention for commission spreadsheet reconciliation.
+                </p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {reconciliationSummary.alerts.slice(0, 5).map((alert) => (
+                    <div 
+                      key={alert.id} 
+                      className={`p-3 rounded border-l-4 text-xs ${
+                        alert.severity === 'high' ? 'bg-red-50 border-red-400' :
+                        alert.severity === 'medium' ? 'bg-yellow-50 border-yellow-400' :
+                        'bg-blue-50 border-blue-400'
+                      }`}
+                    >
+                      <p className="font-medium">{formatAlertMessage(alert)}</p>
+                      <p className="text-gray-600 mt-1">{alert.suggestedAction}</p>
+                    </div>
+                  ))}
+                  {reconciliationSummary.alerts.length > 5 && (
+                    <p className="text-xs text-orange-600 italic">
+                      ...and {reconciliationSummary.alerts.length - 5} more issues
+                    </p>
+                  )}
+                </div>
+                {reconciliationSummary.recommendations.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-orange-200">
+                    <p className="font-medium text-orange-800 text-xs mb-2">Recommendations:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {reconciliationSummary.recommendations.map((rec, index) => (
+                        <li key={index} className="text-xs text-orange-700">{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -496,7 +604,7 @@ export default function InsightsDashboard() {
           <p className="text-sm text-green-600 mt-1">
             {(() => {
               const paidAmount = filteredPolicies
-                .filter(p => p.date_commission_paid)
+                .filter(p => p.date_policy_verified)
                 .reduce((sum, p) => sum + p.commission_due, 0);
               const paidPercentage = totalCommission > 0 ? (paidAmount / totalCommission) * 100 : 0;
               return `${paidPercentage.toFixed(0)}% paid`;
@@ -702,12 +810,17 @@ export default function InsightsDashboard() {
                   <p className="text-2xl font-bold mt-2">{status.count}</p>
                   <p className="text-sm text-gray-600">policies</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-600">Commission</p>
-                  <p className="text-lg font-semibold">
-                    ${status.value.toLocaleString()}
-                  </p>
-                </div>
+                                 <div className="text-right">
+                   <p className="text-sm text-gray-600">Commission</p>
+                   <p className={`text-lg font-semibold ${
+                     status.status === "Cancelled" ? "text-red-600" : ""
+                   }`}>
+                     {status.status === "Cancelled" ? "-" : ""}${status.value.toLocaleString()}
+                   </p>
+                   {status.status === "Cancelled" && status.count > 0 && (
+                     <p className="text-xs text-red-600 mt-1 font-medium">Lost revenue</p>
+                   )}
+                 </div>
               </div>
             </div>
           ))}
@@ -743,20 +856,20 @@ export default function InsightsDashboard() {
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-blue-600">
-              {filteredPolicies.filter(p => !p.date_commission_paid).length}
+              {filteredPolicies.filter(p => !p.date_policy_verified).length}
             </div>
             <div className="text-sm text-gray-600 mt-1">Awaiting Payment</div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => !p.date_commission_paid).length / filteredPolicies.length) * 100}%` }}></div>
+              <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => !p.date_policy_verified).length / filteredPolicies.length) * 100}%` }}></div>
             </div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-purple-600">
-              {filteredPolicies.filter(p => p.date_commission_paid).length}
+              {filteredPolicies.filter(p => p.date_policy_verified).length}
             </div>
-            <div className="text-sm text-gray-600 mt-1">Paid</div>
+                         <div className="text-sm text-gray-600 mt-1">Verified</div>
             <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-              <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => p.date_commission_paid).length / filteredPolicies.length) * 100}%` }}></div>
+              <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${(filteredPolicies.filter(p => p.date_policy_verified).length / filteredPolicies.length) * 100}%` }}></div>
             </div>
           </div>
         </div>
@@ -772,17 +885,17 @@ export default function InsightsDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-green-800">
-                  Paid Commissions
-                </h3>
-                <p className="text-2xl font-bold text-green-900 mt-2">
-                  ${insights.commissionPayments.paid.toLocaleString()}
-                </p>
-                <p className="text-sm text-green-600 mt-1">
-                  {insights.commissionPayments.paidCount} policies
-                </p>
-              </div>
+                             <div>
+                 <h3 className="text-sm font-medium text-green-800">
+                   Verified Policies
+                 </h3>
+                 <p className="text-2xl font-bold text-green-900 mt-2">
+                   ${insights.commissionPayments.verified.toLocaleString()}
+                 </p>
+                 <p className="text-sm text-green-600 mt-1">
+                   {insights.commissionPayments.verifiedCount} policies
+                 </p>
+               </div>
               <div className="bg-green-200 rounded-full p-3">
                 <svg className="h-6 w-6 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -793,17 +906,17 @@ export default function InsightsDashboard() {
           
           <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-orange-800">
-                  Unpaid Commissions
-                </h3>
-                <p className="text-2xl font-bold text-orange-900 mt-2">
-                  ${insights.commissionPayments.unpaid.toLocaleString()}
-                </p>
-                <p className="text-sm text-orange-600 mt-1">
-                  {insights.commissionPayments.unpaidCount} policies
-                </p>
-              </div>
+                             <div>
+                 <h3 className="text-sm font-medium text-orange-800">
+                   Unverified Policies
+                 </h3>
+                 <p className="text-2xl font-bold text-orange-900 mt-2">
+                   ${insights.commissionPayments.unverified.toLocaleString()}
+                 </p>
+                 <p className="text-sm text-orange-600 mt-1">
+                   {insights.commissionPayments.unverifiedCount} policies
+                 </p>
+               </div>
               <div className="bg-orange-200 rounded-full p-3">
                 <svg className="h-6 w-6 text-orange-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -842,14 +955,14 @@ export default function InsightsDashboard() {
 
         {/* Payment Progress Bar */}
         <div className="mb-6">
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
-            <span>Payment Progress</span>
-            <span>{((insights.commissionPayments.paidCount / (insights.commissionPayments.paidCount + insights.commissionPayments.unpaidCount)) * 100).toFixed(1)}% Complete</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
-            <div 
-              className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full"
-              style={{ width: `${(insights.commissionPayments.paidCount / (insights.commissionPayments.paidCount + insights.commissionPayments.unpaidCount)) * 100}%` }}
+                     <div className="flex justify-between text-sm text-gray-600 mb-2">
+             <span>Verification Progress</span>
+                         <span>{((insights.commissionPayments.verifiedCount / (insights.commissionPayments.verifiedCount + insights.commissionPayments.unverifiedCount)) * 100).toFixed(1)}% Complete</span>
+           </div>
+           <div className="w-full bg-gray-200 rounded-full h-3">
+             <div 
+               className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full"
+               style={{ width: `${(insights.commissionPayments.verifiedCount / (insights.commissionPayments.verifiedCount + insights.commissionPayments.unverifiedCount)) * 100}%` }}
             />
           </div>
         </div>
@@ -873,7 +986,7 @@ export default function InsightsDashboard() {
                 stroke="#10B981"
                 fill="#10B981"
                 fillOpacity={0.3}
-                name="Commission Paid"
+                name="Commission from Verified Policies"
               />
             </AreaChart>
           </ResponsiveContainer>

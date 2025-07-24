@@ -10,24 +10,33 @@ import {
   calculateExpectedCommissionForPeriod
 } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
+import { detectChargeback } from "@/lib/chargeback";
 
 interface PipelineData {
   paymentDate: string;
   periodEnd: string;
   expectedCommission: number;
   totalCommission: number;
-  paidCommission: number;
+  verifiedCommission: number;
   policyCount: number;
-  paidCount: number;
-  unpaidCount: number;
+  verifiedCount: number;
+  unverifiedCount: number;
   daysUntilPayment: number;
   policies: Policy[];
 }
 
-export default function CommissionPipeline() {
+interface CommissionPipelineProps {
+  refreshKey?: number;
+  onPolicyUpdate?: () => void;
+}
+
+export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: CommissionPipelineProps) {
   const [pipelineData, setPipelineData] = useState<PipelineData[]>([]);
+  const [allPolicies, setAllPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PipelineData | null>(null);
+  const [reconciliationMode, setReconciliationMode] = useState(false);
+  const [reconciliationData, setReconciliationData] = useState<{[key: number]: boolean}>({});
   const { user } = useUser();
 
   const fetchPolicies = useCallback(async () => {
@@ -43,6 +52,7 @@ export default function CommissionPipeline() {
       if (error) throw error;
 
       const policiesData = data || [];
+      setAllPolicies(policiesData);
       generatePipelineData(policiesData);
     } catch (err) {
       console.error("Error fetching policies:", err);
@@ -51,18 +61,129 @@ export default function CommissionPipeline() {
     }
   }, [user]);
 
+  const handleReconciliation = async () => {
+    if (!user || !selectedPeriod) return;
+
+    try {
+      const updates = [];
+      const discrepancies = [];
+      
+      for (const [policyIdStr, isPaid] of Object.entries(reconciliationData)) {
+        const policyId = parseInt(policyIdStr);
+        const policy = selectedPeriod.policies.find(p => p.id === policyId);
+        
+        if (policy) {
+          if (isPaid && !policy.date_policy_verified) {
+            // Policy is on spreadsheet but not verified in app - update verification
+            updates.push({
+              id: policyId,
+              date_policy_verified: new Date().toISOString()
+            });
+          } else if (!isPaid && policy.date_policy_verified) {
+            // Policy is verified in app but not on spreadsheet - flag discrepancy
+            console.log(`Policy ${policy.policy_number} needs reconciliation - verified in app but not on spreadsheet`);
+            discrepancies.push({
+              policyNumber: policy.policy_number,
+              client: policy.client,
+              carrier: policy.carrier,
+              commissionAmount: policy.commission_due,
+              issueType: 'verified_missing' as const,
+              daysOverdue: Math.floor((new Date().getTime() - new Date(policy.date_policy_verified).getTime()) / (1000 * 60 * 60 * 24))
+            });
+          }
+        }
+      }
+
+      // Process database updates
+      if (updates.length > 0) {
+        for (const update of updates) {
+          const { error } = await supabase
+            .from("policies")
+            .update({ 
+              date_policy_verified: update.date_policy_verified,
+              policy_status: 'Active'  // Automatically set to Active when verified
+            })
+            .eq("id", update.id)
+            .eq("user_id", user.id);
+
+          if (error) throw error;
+        }
+
+        await fetchPolicies();
+        if (onPolicyUpdate) {
+          onPolicyUpdate();
+        }
+      }
+
+      // Send Slack alert for discrepancies if any found
+      if (discrepancies.length > 0) {
+        try {
+          const response = await fetch('/api/slack-notification', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              type: 'reconciliation_alert',
+              data: {
+                discrepancies
+              }
+            }),
+          });
+
+          if (response.ok) {
+            console.log('Reconciliation alert sent to Slack successfully');
+          } else {
+            console.error('Failed to send reconciliation alert to Slack');
+          }
+        } catch (slackError) {
+          console.error('Error sending Slack reconciliation alert:', slackError);
+          // Don't fail the reconciliation process if Slack fails
+        }
+      }
+
+      setReconciliationMode(false);
+      setReconciliationData({});
+      
+      // Show success message
+      const updatedCount = updates.length;
+      const discrepancyCount = discrepancies.length;
+      let message = "Reconciliation completed!";
+      if (updatedCount > 0) {
+        message += ` ${updatedCount} ${updatedCount === 1 ? 'policy' : 'policies'} verified.`;
+      }
+      if (discrepancyCount > 0) {
+        message += ` ${discrepancyCount} ${discrepancyCount === 1 ? 'discrepancy' : 'discrepancies'} flagged and sent to Slack.`;
+      }
+      
+      // You could show this message in a toast notification if you have one
+      console.log(message);
+      
+    } catch (err) {
+      console.error("Error processing reconciliation:", err);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchPolicies();
     }
   }, [user, fetchPolicies]);
 
+  useEffect(() => {
+    if (user && refreshKey !== undefined) {
+      fetchPolicies();
+    }
+  }, [refreshKey, user, fetchPolicies]);
+
   const generatePipelineData = (policies: Policy[]) => {
-    const upcomingPeriods = getUpcomingPaymentPeriods(6); // Get next 6 payment periods
+    const upcomingPeriods = getUpcomingPaymentPeriods(6);
     const pipeline: PipelineData[] = [];
 
+    const activePolicies = policies.filter(policy => policy.policy_status !== 'Cancelled');
+
     upcomingPeriods.forEach(period => {
-      const periodData = calculateExpectedCommissionForPeriod(policies, period.periodEnd);
+      const periodData = calculateExpectedCommissionForPeriod(activePolicies, period.periodEnd);
       const today = new Date();
       const payDate = parseISO(period.date);
       const daysUntil = Math.ceil((payDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -72,10 +193,10 @@ export default function CommissionPipeline() {
         periodEnd: period.periodEnd,
         expectedCommission: periodData.expectedAmount,
         totalCommission: periodData.totalAmount,
-        paidCommission: periodData.paidAmount,
+        verifiedCommission: periodData.verifiedAmount,
         policyCount: periodData.policyCount,
-        paidCount: periodData.paidCount,
-        unpaidCount: periodData.unpaidCount,
+        verifiedCount: periodData.verifiedCount,
+        unverifiedCount: periodData.unverifiedCount,
         daysUntilPayment: Math.max(0, daysUntil),
         policies: periodData.policies as Policy[]
       });
@@ -87,11 +208,13 @@ export default function CommissionPipeline() {
   const nextPayment = getNextPaymentDate();
   const previousPayment = getPreviousPaymentDate();
 
-  // Calculate total expected commission in pipeline
   const totalPipelineCommission = pipelineData.reduce((sum, period) => sum + period.totalCommission, 0);
-  const totalPaidCommission = pipelineData.reduce((sum, period) => sum + period.paidCommission, 0);
+  const totalVerifiedCommission = pipelineData.reduce((sum, period) => sum + period.verifiedCommission, 0);
   const totalUnpaidCommission = pipelineData.reduce((sum, period) => sum + period.expectedCommission, 0);
   const totalPipelinePolicies = pipelineData.reduce((sum, period) => sum + period.policyCount, 0);
+
+  const cancelledPolicies = allPolicies.filter(p => p.policy_status === 'Cancelled');
+  const potentialLostCommission = cancelledPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
 
   if (loading) {
     return (
@@ -112,8 +235,8 @@ export default function CommissionPipeline() {
             <p className="text-3xl font-bold">${totalPipelineCommission.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-blue-100 text-sm">Already Paid</p>
-            <p className="text-2xl font-bold text-green-300">${totalPaidCommission.toLocaleString()}</p>
+            <p className="text-blue-100 text-sm">Already Verified</p>
+            <p className="text-2xl font-bold text-green-300">${totalVerifiedCommission.toLocaleString()}</p>
           </div>
           <div>
             <p className="text-blue-100 text-sm">Pending Payment</p>
@@ -156,6 +279,31 @@ export default function CommissionPipeline() {
         </div>
       )}
 
+      {/* Cancelled Policies Motivation Alert */}
+      {cancelledPolicies.length > 0 && (
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-red-800">Lost Commission Opportunity</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>
+                  You have <strong>{cancelledPolicies.length}</strong> cancelled {cancelledPolicies.length === 1 ? 'policy' : 'policies'} representing 
+                  <strong className="text-red-800"> ${potentialLostCommission.toLocaleString()}</strong> in lost commission.
+                </p>
+                <p className="mt-1 text-xs">
+                  💡 Consider implementing a follow-up system for pending policies to reduce cancellations.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Upcoming Payment Periods */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-900">Upcoming Payment Periods</h3>
@@ -165,7 +313,12 @@ export default function CommissionPipeline() {
             className={`bg-white rounded-lg shadow p-6 cursor-pointer transition-all hover:shadow-lg ${
               index === 0 ? 'ring-2 ring-blue-500' : ''
             }`}
-            onClick={() => setSelectedPeriod(period)}
+            onClick={() => {
+              fetchPolicies();
+              setSelectedPeriod(period);
+              setReconciliationMode(false);
+              setReconciliationData({});
+            }}
           >
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -187,14 +340,14 @@ export default function CommissionPipeline() {
                 </p>
                 <div className="text-sm text-gray-600">
                   <p>{period.policyCount} {period.policyCount === 1 ? 'policy' : 'policies'}</p>
-                  {period.paidCount > 0 && (
+                  {period.verifiedCount > 0 && (
                     <p className="text-green-600">
-                      ${period.paidCommission.toLocaleString()} paid ({period.paidCount})
+                      ${period.verifiedCommission.toLocaleString()} verified ({period.verifiedCount})
                     </p>
                   )}
-                  {period.unpaidCount > 0 && (
+                  {period.unverifiedCount > 0 && (
                     <p className="text-blue-600">
-                      ${period.expectedCommission.toLocaleString()} pending ({period.unpaidCount})
+                      ${period.expectedCommission.toLocaleString()} pending verification ({period.unverifiedCount})
                     </p>
                   )}
                 </div>
@@ -258,74 +411,193 @@ export default function CommissionPipeline() {
                     {format(parseISO(selectedPeriod.paymentDate), 'EEEE, MMMM d, yyyy')}
                   </p>
                 </div>
-                <button
-                  onClick={() => setSelectedPeriod(null)}
-                  className="text-white/80 hover:text-white"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-2">
+                  {!reconciliationMode && (
+                    <button
+                      onClick={() => {
+                        setReconciliationMode(true);
+                        const initialData: {[key: number]: boolean} = {};
+                        selectedPeriod.policies.forEach(policy => {
+                          initialData[policy.id] = !!policy.date_policy_verified;
+                        });
+                        setReconciliationData(initialData);
+                      }}
+                      className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
+                    >
+                      📊 Reconcile Spreadsheet
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSelectedPeriod(null);
+                      setReconciliationMode(false);
+                      setReconciliationData({});
+                    }}
+                    className="text-white/80 hover:text-white"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <p className="text-sm text-blue-700 font-medium">Expected Commission</p>
-                  <p className="text-2xl font-bold text-blue-900">
-                    ${selectedPeriod.expectedCommission.toLocaleString()}
-                  </p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <p className="text-sm text-green-700 font-medium">Policy Count</p>
-                  <p className="text-2xl font-bold text-green-900">
-                    {selectedPeriod.policyCount}
-                  </p>
-                </div>
-                <div className="bg-purple-50 rounded-lg p-4">
-                  <p className="text-sm text-purple-700 font-medium">Days Until Payment</p>
-                  <p className="text-2xl font-bold text-purple-900">
-                    {selectedPeriod.daysUntilPayment}
-                  </p>
-                </div>
-              </div>
+              {reconciliationMode ? (
+                <div className="space-y-6">
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                      <svg className="h-5 w-5 text-yellow-400 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <h3 className="text-sm font-medium text-yellow-800">Commission Spreadsheet Reconciliation</h3>
+                        <p className="text-sm text-yellow-700 mt-1">
+                          Check each policy below that appears on your commission spreadsheet for this period. 
+                          Policies in red are chargebacks (cancelled within 30 days).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-              <h4 className="font-semibold text-gray-900 mb-3">Policies in this period</h4>
-              <div className="bg-gray-50 rounded-lg overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Carrier</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Commission</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {selectedPeriod.policies.map((policy, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900">{policy.client}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{policy.carrier}</td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{policy.product}</td>
-                        <td className="px-4 py-3 text-sm">
-                          <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${
-                            policy.policy_status === 'Active' ? 'bg-green-100 text-green-800' :
-                            policy.policy_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {policy.policy_status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                          ${policy.commission_due.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  <div className="space-y-3">
+                    {selectedPeriod.policies.map((policy) => {
+                      const { isChargeback } = detectChargeback(policy);
+                      const verificationMismatch = policy.date_policy_verified && !reconciliationData[policy.id];
+                      
+                      return (
+                        <div 
+                          key={policy.id} 
+                          className={`border rounded-lg p-4 ${
+                            isChargeback ? 'bg-red-50 border-red-200' : 
+                            verificationMismatch ? 'bg-orange-50 border-orange-200' :
+                            'bg-white border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={reconciliationData[policy.id] || false}
+                                  onChange={(e) => setReconciliationData(prev => ({
+                                    ...prev,
+                                    [policy.id]: e.target.checked
+                                  }))}
+                                  className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                  disabled={isChargeback}
+                                />
+                                <div>
+                                  <p className="font-medium text-gray-900">{policy.client}</p>
+                                  <p className="text-sm text-gray-600">
+                                    {policy.carrier} • {policy.policy_number}
+                                  </p>
+                                  {isChargeback && (
+                                    <p className="text-xs text-red-600 font-medium mt-1">
+                                      ⚠️ CHARGEBACK - Cancelled within 30 days
+                                    </p>
+                                  )}
+                                  {verificationMismatch && (
+                                    <p className="text-xs text-orange-600 font-medium mt-1">
+                                      ⚠️ Verified in app but not checked for spreadsheet
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-semibold ${isChargeback ? 'text-red-600' : 'text-gray-900'}`}>
+                                ${isChargeback ? '-' : ''}${policy.commission_due.toFixed(2)}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {policy.date_policy_verified ? 'Previously Verified' : 'Unverified'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                    <button
+                      onClick={() => {
+                        setReconciliationMode(false);
+                        setReconciliationData({});
+                      }}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleReconciliation}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                    >
+                      Update Verified Status
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <p className="text-sm text-blue-700 font-medium">Expected Commission</p>
+                      <p className="text-2xl font-bold text-blue-900">
+                        ${selectedPeriod.expectedCommission.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <p className="text-sm text-green-700 font-medium">Policy Count</p>
+                      <p className="text-2xl font-bold text-green-900">
+                        {selectedPeriod.policyCount}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <p className="text-sm text-purple-700 font-medium">Days Until Payment</p>
+                      <p className="text-2xl font-bold text-purple-900">
+                        {selectedPeriod.daysUntilPayment}
+                      </p>
+                    </div>
+                  </div>
+
+                  <h4 className="font-semibold text-gray-900 mb-3">Policies in this period</h4>
+                  <div className="bg-gray-50 rounded-lg overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Carrier</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Commission</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {selectedPeriod.policies.map((policy, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900">{policy.client}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{policy.carrier}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{policy.product}</td>
+                            <td className="px-4 py-3 text-sm">
+                              <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${
+                                policy.policy_status === 'Active' ? 'bg-green-100 text-green-800' :
+                                policy.policy_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {policy.policy_status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                              ${policy.commission_due.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
