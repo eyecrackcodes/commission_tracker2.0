@@ -37,6 +37,8 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
   const [selectedPeriod, setSelectedPeriod] = useState<PipelineData | null>(null);
   const [reconciliationMode, setReconciliationMode] = useState(false);
   const [reconciliationData, setReconciliationData] = useState<{[key: number]: boolean}>({});
+  const [slackNotificationData, setSlackNotificationData] = useState<{[key: number]: boolean}>({});
+  const [removalRequests, setRemovalRequests] = useState<{[key: number]: string}>({});
   const { user } = useUser();
 
   const fetchPolicies = useCallback(async () => {
@@ -67,6 +69,8 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
     try {
       const updates = [];
       const discrepancies = [];
+      const slackNotifications = [];
+      const removals = [];
       
       for (const [policyIdStr, isPaid] of Object.entries(reconciliationData)) {
         const policyId = parseInt(policyIdStr);
@@ -81,28 +85,49 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
             });
           } else if (!isPaid && policy.date_policy_verified) {
             // Policy is verified in app but not on spreadsheet - flag discrepancy
-            console.log(`Policy ${policy.policy_number} needs reconciliation - verified in app but not on spreadsheet`);
             discrepancies.push({
-              policyNumber: policy.policy_number,
+              policyId: policy.id,
               client: policy.client,
+              policyNumber: policy.policy_number,
               carrier: policy.carrier,
-              commissionAmount: policy.commission_due,
-              issueType: 'verified_missing' as const,
-              daysOverdue: Math.floor((new Date().getTime() - new Date(policy.date_policy_verified).getTime()) / (1000 * 60 * 60 * 24))
+              commission: policy.commission_due,
+              reason: 'verified_but_not_on_spreadsheet'
+            });
+          }
+
+          // Check for Slack notification requests
+          if (slackNotificationData[policyId]) {
+            slackNotifications.push({
+              policyId: policy.id,
+              client: policy.client,
+              policyNumber: policy.policy_number,
+              carrier: policy.carrier,
+              commission: policy.commission_due,
+              status: policy.policy_status,
+              reason: 'missing_commission_notification'
+            });
+          }
+
+          // Check for removal requests
+          if (removalRequests[policyId]?.trim()) {
+            removals.push({
+              policyId: policy.id,
+              client: policy.client,
+              policyNumber: policy.policy_number,
+              carrier: policy.carrier,
+              commission: policy.commission_due,
+              reason: removalRequests[policyId].trim()
             });
           }
         }
       }
 
-      // Process database updates
+      // Update verified policies
       if (updates.length > 0) {
         for (const update of updates) {
           const { error } = await supabase
             .from("policies")
-            .update({ 
-              date_policy_verified: update.date_policy_verified,
-              policy_status: 'Active'  // Automatically set to Active when verified
-            })
+            .update({ date_policy_verified: update.date_policy_verified })
             .eq("id", update.id)
             .eq("user_id", user.id);
 
@@ -115,8 +140,9 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
         }
       }
 
-      // Send Slack alert for discrepancies if any found
-      if (discrepancies.length > 0) {
+      // Send Slack notifications for all types of issues
+      const allSlackIssues = [...discrepancies, ...slackNotifications, ...removals];
+      if (allSlackIssues.length > 0) {
         try {
           const response = await fetch('/api/slack-notification', {
             method: 'POST',
@@ -126,7 +152,7 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
             body: JSON.stringify({
               type: 'reconciliation_alert',
               data: {
-                discrepancies
+                discrepancies: allSlackIssues
               }
             }),
           });
@@ -138,25 +164,25 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
           }
         } catch (slackError) {
           console.error('Error sending Slack reconciliation alert:', slackError);
-          // Don't fail the reconciliation process if Slack fails
         }
       }
 
       setReconciliationMode(false);
       setReconciliationData({});
+      setSlackNotificationData({});
+      setRemovalRequests({});
       
       // Show success message
       const updatedCount = updates.length;
-      const discrepancyCount = discrepancies.length;
+      const issueCount = allSlackIssues.length;
       let message = "Reconciliation completed!";
       if (updatedCount > 0) {
         message += ` ${updatedCount} ${updatedCount === 1 ? 'policy' : 'policies'} verified.`;
       }
-      if (discrepancyCount > 0) {
-        message += ` ${discrepancyCount} ${discrepancyCount === 1 ? 'discrepancy' : 'discrepancies'} flagged and sent to Slack.`;
+      if (issueCount > 0) {
+        message += ` ${issueCount} ${issueCount === 1 ? 'issue' : 'issues'} reported to Slack.`;
       }
       
-      // You could show this message in a toast notification if you have one
       console.log(message);
       
     } catch (err) {
@@ -392,7 +418,12 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                   {period.policies.slice(0, 3).map((policy, idx) => (
                     <div key={idx} className="flex justify-between text-sm">
                       <span className="text-gray-700">{policy.client} - {policy.carrier}</span>
-                      <span className="font-medium">${policy.commission_due.toFixed(2)}</span>
+                      <span className="font-medium">{policy.commission_due.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}</span>
                     </div>
                   ))}
                   {period.policies.length > 3 && (
@@ -427,10 +458,16 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                       onClick={() => {
                         setReconciliationMode(true);
                         const initialData: {[key: number]: boolean} = {};
+                        const initialSlackData: {[key: number]: boolean} = {};
+                        const initialRemovalData: {[key: number]: string} = {};
                         selectedPeriod.policies.forEach(policy => {
                           initialData[policy.id] = !!policy.date_policy_verified;
+                          initialSlackData[policy.id] = false;
+                          initialRemovalData[policy.id] = '';
                         });
                         setReconciliationData(initialData);
+                        setSlackNotificationData(initialSlackData);
+                        setRemovalRequests(initialRemovalData);
                       }}
                       className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
                     >
@@ -442,6 +479,8 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                       setSelectedPeriod(null);
                       setReconciliationMode(false);
                       setReconciliationData({});
+                      setSlackNotificationData({});
+                      setRemovalRequests({});
                     }}
                     className="text-white/80 hover:text-white"
                   >
@@ -485,43 +524,113 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                             'bg-white border-gray-200'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3">
-                                <input
-                                  type="checkbox"
-                                  checked={reconciliationData[policy.id] || false}
-                                  onChange={(e) => setReconciliationData(prev => ({
-                                    ...prev,
-                                    [policy.id]: e.target.checked
-                                  }))}
-                                  className="h-5 w-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                  disabled={isChargeback}
-                                />
-                                <div>
-                                  <p className="font-medium text-gray-900">{policy.client}</p>
-                                  <p className="text-sm text-gray-600">
-                                    {policy.carrier} • {policy.policy_number}
-                                  </p>
-                                  {isChargeback && (
-                                    <p className="text-xs text-red-600 font-medium mt-1">
-                                      ⚠️ CHARGEBACK - Cancelled within 30 days
-                                    </p>
-                                  )}
-                                  {verificationMismatch && (
-                                    <p className="text-xs text-orange-600 font-medium mt-1">
-                                      ⚠️ Verified in app but not checked for spreadsheet
-                                    </p>
-                                  )}
+                          <div className="space-y-3">
+                            {/* Main Policy Information */}
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={reconciliationData[policy.id] || false}
+                                        onChange={(e) => setReconciliationData(prev => ({
+                                          ...prev,
+                                          [policy.id]: e.target.checked
+                                        }))}
+                                        className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                        disabled={isChargeback}
+                                      />
+                                      <label className="text-sm font-medium text-gray-700">
+                                        On Spreadsheet
+                                      </label>
+                                    </div>
+                                    <p className="font-medium text-gray-900">{policy.client}</p>
+                                    <div className="text-sm text-gray-600 space-y-1">
+                                      <p><span className="font-medium">Policy:</span> {policy.policy_number}</p>
+                                      <p><span className="font-medium">Carrier:</span> {policy.carrier} • {policy.product}</p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium">Status:</span>
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                          policy.policy_status === 'Active' ? 'bg-green-100 text-green-800' :
+                                          policy.policy_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-red-100 text-red-800'
+                                        }`}>
+                                          {policy.policy_status}
+                                        </span>
+                                      </div>
+                                      {policy.date_policy_verified && (
+                                        <p><span className="font-medium">Verified:</span> {format(parseISO(policy.date_policy_verified), 'MMM d, yyyy')}</p>
+                                      )}
+                                    </div>
+                                    {isChargeback && (
+                                      <p className="text-xs text-red-600 font-medium mt-2">
+                                        ⚠️ CHARGEBACK - Cancelled within 30 days
+                                      </p>
+                                    )}
+                                    {verificationMismatch && (
+                                      <p className="text-xs text-orange-600 font-medium mt-2">
+                                        ⚠️ Verified in app but not checked for spreadsheet
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
+                              <div className="text-right">
+                                <p className={`text-xl font-semibold ${isChargeback ? 'text-red-600' : 'text-gray-900'}`}>
+                                  {isChargeback ? '-' : ''}{policy.commission_due.toLocaleString('en-US', {
+                                    style: 'currency',
+                                    currency: 'USD',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                  })}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {(policy.commission_rate * 100).toFixed(0)}% commission
+                                </p>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <p className={`font-semibold ${isChargeback ? 'text-red-600' : 'text-gray-900'}`}>
-                                ${isChargeback ? '-' : ''}${policy.commission_due.toFixed(2)}
+
+                            {/* Slack Notification Controls */}
+                            <div className="pt-2 border-t border-gray-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={slackNotificationData[policy.id] || false}
+                                    onChange={(e) => setSlackNotificationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: e.target.checked
+                                    }))}
+                                    className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                  />
+                                  <label className="text-sm font-medium text-gray-700">
+                                    🚨 Send Slack Alert (Missing Commission)
+                                  </label>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1 ml-6">
+                                Check this to notify the team about missing commission or discrepancies
                               </p>
-                              <p className="text-xs text-gray-500">
-                                {policy.date_policy_verified ? 'Previously Verified' : 'Unverified'}
+                            </div>
+
+                            {/* Removal Request Input */}
+                            <div className="pt-2 border-t border-gray-200">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                📝 Request Policy Removal (Optional)
+                              </label>
+                              <textarea
+                                value={removalRequests[policy.id] || ''}
+                                onChange={(e) => setRemovalRequests(prev => ({
+                                  ...prev,
+                                  [policy.id]: e.target.value
+                                }))}
+                                placeholder="Explain why this policy should be removed from the spreadsheet (e.g., client cancelled, refund issued, etc.)"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                rows={2}
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                This will send a Slack message requesting removal with your explanation
                               </p>
                             </div>
                           </div>
@@ -535,6 +644,8 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                       onClick={() => {
                         setReconciliationMode(false);
                         setReconciliationData({});
+                        setSlackNotificationData({});
+                        setRemovalRequests({});
                       }}
                       className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
                     >
@@ -544,7 +655,7 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                       onClick={handleReconciliation}
                       className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
                     >
-                      Update Verified Status
+                      🔄 Process Reconciliation
                     </button>
                   </div>
                 </div>
@@ -599,7 +710,12 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                              ${policy.commission_due.toFixed(2)}
+                              {policy.commission_due.toLocaleString('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                              })}
                             </td>
                           </tr>
                         ))}
