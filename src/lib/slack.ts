@@ -6,11 +6,11 @@ const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
  * Send a quick post to Slack for new policies
  */
 export async function sendQuickPost(
-  client: string,
   carrier: string,
   premium: number,
-  commission: number,
-  userName?: string
+  userName?: string,
+  userImageUrl?: string,
+  customMessage?: string
 ): Promise<boolean> {
   try {
     if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
@@ -24,18 +24,32 @@ export async function sendQuickPost(
       minimumFractionDigits: 2,
     }).format(premium);
 
-    const formattedCommission = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    }).format(commission);
+    // Simple one-line message with premium, carrier, and agent
+    const text = `${formattedPremium} • ${carrier}${userName ? ` • ${userName}` : ''}${customMessage ? ` • ${customMessage}` : ''}`;
 
-    // Simple message with just one emoji
-    const text = `🎉 **New Sale**\n**Client:** ${client}\n**Carrier:** ${carrier}\n**Premium:** ${formattedPremium}\n**Commission:** ${formattedCommission}${userName ? `\n**Agent:** ${userName}` : ''}`;
+    // Create block with smaller profile picture
+    const blocks = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: text,
+        },
+        accessory: userImageUrl
+          ? {
+              type: "image",
+              image_url: userImageUrl,
+              alt_text: userName || "Agent",
+            }
+          : undefined,
+      },
+    ];
 
     const result = await slack.chat.postMessage({
       channel: process.env.SLACK_CHANNEL_ID,
       text: text,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      blocks: blocks as any[],
     });
 
     if (result.ok) {

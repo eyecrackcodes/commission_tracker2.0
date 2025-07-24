@@ -24,11 +24,11 @@ export async function POST(request: NextRequest) {
     // Handle different notification types
     if (type === 'quick_post') {
       const result = await sendQuickPost(
-        data.client,
         data.carrier,
         data.premium,
-        data.commission,
-        userName
+        userName,
+        userImageUrl,
+        data.customMessage
       );
 
       if (result) {

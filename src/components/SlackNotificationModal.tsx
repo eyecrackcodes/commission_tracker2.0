@@ -26,6 +26,7 @@ interface SlackNotificationModalProps {
 
 export default function SlackNotificationModal({ policyData, onClose }: SlackNotificationModalProps) {
   const [slackLoading, setSlackLoading] = useState(false);
+  const [customMessage, setCustomMessage] = useState("");
   const { user } = useUser();
 
   if (!policyData || !user) return null;
@@ -33,16 +34,12 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
   const sendSlackNotification = async () => {
     setSlackLoading(true);
     try {
-      // Calculate commission from premium and commission rate
-      const commission = policyData.commissionable_annual_premium * policyData.commission_rate;
-      
       const payload = {
         type: 'quick_post',
         data: {
-          client: policyData.client,
           carrier: policyData.carrier,
           premium: policyData.commissionable_annual_premium,
-          commission: commission
+          customMessage: customMessage.trim() || undefined
         }
       };
 
@@ -98,43 +95,44 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
                     minimumFractionDigits: 2,
                   }).format(policyData.commissionable_annual_premium)}
                 </p>
-                <p className="text-sm text-gray-600">
-                  Commission: {new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    minimumFractionDigits: 2,
-                  }).format(policyData.commissionable_annual_premium * policyData.commission_rate)}
-                </p>
               </div>
               {user.imageUrl && (
                 <Image 
                   src={user.imageUrl} 
                   alt={getBestUserName(user)}
-                  width={48}
-                  height={48}
-                  className="w-12 h-12 rounded-full"
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 rounded-full"
                 />
               )}
             </div>
           </div>
 
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Custom Message (Optional)
+            </label>
+            <input
+              type="text"
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder="Add a custom message (e.g., OCC, WIN, Big Sale!)"
+              maxLength={50}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              This will appear at the end of your Slack post
+            </p>
+          </div>
+
           <div className="mb-4 p-3 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-700 font-medium mb-1">Will post to Slack:</p>
             <p className="text-sm text-gray-700">
-              🎉 <strong>New Sale</strong><br/>
-              <strong>Client:</strong> {policyData.client}<br/>
-              <strong>Carrier:</strong> {policyData.carrier}<br/>
-              <strong>Premium:</strong> {new Intl.NumberFormat('en-US', {
+              {new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: 'USD',
                 minimumFractionDigits: 2,
-              }).format(policyData.commissionable_annual_premium)}<br/>
-              <strong>Commission:</strong> {new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                minimumFractionDigits: 2,
-              }).format(policyData.commissionable_annual_premium * policyData.commission_rate)}<br/>
-              <strong>Agent:</strong> {getBestUserName(user)}
+              }).format(policyData.commissionable_annual_premium)} • {policyData.carrier} • {getBestUserName(user)}{customMessage.trim() ? ` • ${customMessage.trim()}` : ''}
             </p>
           </div>
 
