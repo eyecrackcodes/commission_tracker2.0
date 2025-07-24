@@ -68,15 +68,19 @@ export async function sendQuickPost(
 /**
  * Send Slack notification for reconciliation discrepancies
  */
-export async function sendReconciliationAlert(discrepancies: Array<{
-  policyId: number;
-  client: string;
-  policyNumber: string;
-  carrier: string;
-  commission: number;
-  reason: string;
-  status?: string;
-}>): Promise<boolean> {
+export async function sendReconciliationAlert(
+  discrepancies: Array<{
+    policyId: number;
+    client: string;
+    policyNumber: string;
+    carrier: string;
+    commission: number;
+    reason: string;
+    status?: string;
+  }>,
+  userName?: string,
+  userImageUrl?: string
+): Promise<boolean> {
   try {
     if (!process.env.SLACK_BOT_TOKEN) {
       console.error("Slack bot token not configured");
@@ -107,28 +111,6 @@ export async function sendReconciliationAlert(discrepancies: Array<{
       minimumFractionDigits: 2,
     }).format(totalAmount);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const blocks: any[] = [
-      {
-        type: "header",
-        text: {
-          type: "plain_text",
-          text: "🚨 Commission Reconciliation Alert",
-          emoji: true,
-        },
-      },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `Found *${discrepancies.length}* ${discrepancies.length === 1 ? 'policy' : 'policies'} with discrepancies totaling *${formattedTotal}*`,
-        },
-      },
-      {
-        type: "divider",
-      },
-    ];
-
     // Group discrepancies by type for better organization
     const groupedDiscrepancies: {
       verified_but_not_on_spreadsheet: typeof discrepancies;
@@ -151,105 +133,65 @@ export async function sendReconciliationAlert(discrepancies: Array<{
       }
     });
 
-    // Add each type of discrepancy
-    if (groupedDiscrepancies.verified_but_not_on_spreadsheet.length > 0) {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*❌ Verified in App but Missing from Spreadsheet:*`,
-        },
-      });
+    // Create simplified messages for each type
+    const messages = [];
 
-      groupedDiscrepancies.verified_but_not_on_spreadsheet.forEach((disc) => {
-        const formattedAmount = new Intl.NumberFormat("en-US", {
+    if (groupedDiscrepancies.verified_but_not_on_spreadsheet.length > 0) {
+      const policies = groupedDiscrepancies.verified_but_not_on_spreadsheet
+        .map(disc => `${disc.client} • ${disc.carrier} • ${new Intl.NumberFormat("en-US", {
           style: "currency",
           currency: "USD",
           minimumFractionDigits: 2,
-        }).format(Number(disc.commission) || 0);
-
-        blocks.push({
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `• *${disc.client}* (${disc.policyNumber})\n   ${disc.carrier} • ${formattedAmount}`,
-          },
-        });
-      });
+        }).format(Number(disc.commission) || 0)}`)
+        .join('\n');
+      
+      messages.push(`❌ **Missing from Spreadsheet**\n${policies}`);
     }
 
     if (groupedDiscrepancies.missing_commission_notification.length > 0) {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*🚨 Agent Reported Missing Commissions:*`,
-        },
-      });
-
-      groupedDiscrepancies.missing_commission_notification.forEach((disc) => {
-        const formattedAmount = new Intl.NumberFormat("en-US", {
+      const policies = groupedDiscrepancies.missing_commission_notification
+        .map(disc => `${disc.client} • ${disc.carrier} • ${new Intl.NumberFormat("en-US", {
           style: "currency",
           currency: "USD",
           minimumFractionDigits: 2,
-        }).format(Number(disc.commission) || 0);
-
-        blocks.push({
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `• *${disc.client}* (${disc.policyNumber})\n   ${disc.carrier} • ${formattedAmount}\n   Status: ${disc.status || 'Unknown'}`,
-          },
-        });
-      });
+        }).format(Number(disc.commission) || 0)}`)
+        .join('\n');
+      
+      messages.push(`🚨 **Missing Commissions**\n${policies}`);
     }
 
     if (groupedDiscrepancies.removal_requests.length > 0) {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*📝 Policy Removal Requests:*`,
-        },
-      });
-
-      groupedDiscrepancies.removal_requests.forEach((disc) => {
-        const formattedAmount = new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: "USD",
-          minimumFractionDigits: 2,
-        }).format(Number(disc.commission) || 0);
-
-        blocks.push({
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: `• *${disc.client}* (${disc.policyNumber})\n   ${disc.carrier} • ${formattedAmount}\n   *Reason:* ${disc.reason}`,
-          },
-        });
-      });
+      const policies = groupedDiscrepancies.removal_requests
+        .map(disc => `${disc.client} • ${disc.carrier} • ${disc.reason}`)
+        .join('\n');
+      
+      messages.push(`📝 **Removal Requests**\n${policies}`);
     }
 
-    // Add action suggestions
-    blocks.push(
-      {
-        type: "divider",
-      },
+    // Create the main message
+    const mainText = `**Commission Reconciliation** • ${formattedTotal}${userName ? ` • ${userName}` : ''}\n\n${messages.join('\n\n')}`;
+
+    // Create block with profile picture
+    const blocks = [
       {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "📋 *Recommended Actions:*\n" +
-                "• Review commission spreadsheet for missing policies\n" +
-                "• Update policy statuses in the Commission Tracker\n" +
-                "• Contact commission team for discrepancies",
+          text: mainText,
         },
-      }
-    );
+        accessory: userImageUrl
+          ? {
+              type: "image",
+              image_url: userImageUrl,
+              alt_text: userName || "Agent",
+            }
+          : undefined,
+      },
+    ];
 
     const result = await slack.chat.postMessage({
       channel: channelId,
-      text: `🚨 Commission Reconciliation Alert: ${discrepancies.length} policies need attention (${formattedTotal})`,
+      text: `Commission Reconciliation: ${discrepancies.length} policies need attention (${formattedTotal})`,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       blocks: blocks as any[],
     });
