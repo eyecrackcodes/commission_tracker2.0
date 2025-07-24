@@ -25,23 +25,21 @@ interface SlackNotificationModalProps {
 }
 
 export default function SlackNotificationModal({ policyData, onClose }: SlackNotificationModalProps) {
-  const [slackAcronym, setSlackAcronym] = useState("OCC");
   const [slackLoading, setSlackLoading] = useState(false);
+  const [customMessage, setCustomMessage] = useState("");
   const { user } = useUser();
 
   if (!policyData || !user) return null;
 
-  const sendSlackNotification = async (acronym?: string) => {
+  const sendSlackNotification = async () => {
     setSlackLoading(true);
     try {
       const payload = {
         type: 'quick_post',
         data: {
           carrier: policyData.carrier,
-          product: policyData.product,
           premium: policyData.commissionable_annual_premium,
-          acronym: acronym || slackAcronym,
-          userName: getBestUserName(user)
+          customMessage: customMessage.trim() || undefined
         }
       };
 
@@ -102,47 +100,57 @@ export default function SlackNotificationModal({ policyData, onClose }: SlackNot
                 <Image 
                   src={user.imageUrl} 
                   alt={getBestUserName(user)}
-                  width={48}
-                  height={48}
-                  className="w-12 h-12 rounded-full"
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 rounded-full"
                 />
               )}
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Custom Acronym (optional)
-              </label>
-              <input
-                type="text"
-                value={slackAcronym}
-                onChange={(e) => setSlackAcronym(e.target.value)}
-                className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-center font-medium"
-                placeholder="Enter acronym (e.g., OCC, WIN, SALE)"
-              />
-              <p className="text-xs text-gray-500 mt-1 text-center">
-                Will post: &ldquo;{slackAcronym || 'SALE'} - {policyData.carrier} | {policyData.product} | ${policyData.commissionable_annual_premium.toLocaleString()}&rdquo;
-              </p>
-            </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Custom Message (Optional)
+            </label>
+            <input
+              type="text"
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder="Add a custom message (e.g., OCC, WIN, Big Sale!)"
+              maxLength={50}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              This will appear at the end of your Slack post
+            </p>
+          </div>
 
-            <div className="flex space-x-3">
-              <button
-                onClick={() => sendSlackNotification(slackAcronym)}
-                disabled={slackLoading}
-                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {slackLoading ? 'Posting...' : '⚡ Post to Slack'}
-              </button>
-              
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-              >
-                Skip
-              </button>
-            </div>
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-700 font-medium mb-1">Will post to Slack:</p>
+            <p className="text-sm text-gray-700">
+              {new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2,
+              }).format(policyData.commissionable_annual_premium)} • {policyData.carrier} • {getBestUserName(user)}{customMessage.trim() ? ` • ${customMessage.trim()}` : ''}
+            </p>
+          </div>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={sendSlackNotification}
+              disabled={slackLoading}
+              className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {slackLoading ? 'Posting...' : '🎉 Post to Slack'}
+            </button>
+            
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            >
+              Skip
+            </button>
           </div>
         </div>
       </div>

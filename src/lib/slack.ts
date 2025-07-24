@@ -2,31 +2,15 @@ import { WebClient } from '@slack/web-api';
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 
-// Slack Block Kit types
-interface SlackBlock {
-  type: string;
-  text?: {
-    type: string;
-    text: string;
-  };
-  accessory?: {
-    type: string;
-    image_url: string;
-    alt_text: string;
-  };
-}
-
 /**
  * Send a quick post to Slack for new policies
  */
 export async function sendQuickPost(
-  type: string,
-  client: string,
   carrier: string,
   premium: number,
-  commission: number,
   userName?: string,
-  userImageUrl?: string
+  userImageUrl?: string,
+  customMessage?: string
 ): Promise<boolean> {
   try {
     if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_CHANNEL_ID) {
@@ -40,62 +24,11 @@ export async function sendQuickPost(
       minimumFractionDigits: 2,
     }).format(premium);
 
-    const formattedCommission = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-    }).format(commission);
+    // Simple one-line message with premium, carrier, and agent
+    const text = `${formattedPremium} • ${carrier}${userName ? ` • ${userName}` : ''}${customMessage ? ` • ${customMessage}` : ''}`;
 
-    let emoji = "📄";
-    let typeText = "New Policy";
-
-    switch (type.toLowerCase()) {
-      case "life":
-        emoji = "❤️";
-        typeText = "Life Insurance";
-        break;
-      case "health":
-        emoji = "🏥";
-        typeText = "Health Insurance";
-        break;
-      case "auto":
-        emoji = "🚗";
-        typeText = "Auto Insurance";
-        break;
-      case "home":
-        emoji = "🏠";
-        typeText = "Home Insurance";
-        break;
-      case "commercial":
-        emoji = "🏢";
-        typeText = "Commercial Insurance";
-        break;
-      case "annuity":
-        emoji = "💰";
-        typeText = "Annuity";
-        break;
-      case "disability":
-        emoji = "🦽";
-        typeText = "Disability Insurance";
-        break;
-      case "long term care":
-        emoji = "🏥";
-        typeText = "Long Term Care";
-        break;
-      default:
-        emoji = "📄";
-        typeText = "New Policy";
-    }
-
-    const text = `${emoji} *${typeText} Sale!*\n\n` +
-      `Congratulations on your new policy!\n\n` +
-      `📋 **Client:** ${client}\n` +
-      `🏢 **Carrier:** ${carrier}\n` +
-      `💰 **Premium:** ${formattedPremium}\n` +
-      `💵 **Commission:** ${formattedCommission}` +
-      `${userName ? `\n🏆 **Agent:** ${userName}` : ''}`;
-
-    const blocks: SlackBlock[] = [
+    // Create block with smaller profile picture
+    const blocks = [
       {
         type: "section",
         text: {
@@ -106,26 +39,15 @@ export async function sendQuickPost(
           ? {
               type: "image",
               image_url: userImageUrl,
-              alt_text: userName || "User image",
+              alt_text: userName || "Agent",
             }
           : undefined,
       },
     ];
 
-    // Only add congratulations block if user info is available
-    if (userName) {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: "🎉 Keep up the great work!",
-        },
-      });
-    }
-
     const result = await slack.chat.postMessage({
       channel: process.env.SLACK_CHANNEL_ID,
-      text: `${emoji} New ${typeText} sale by ${userName || 'Agent'}: ${client} - ${formattedCommission}`,
+      text: text,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       blocks: blocks as any[],
     });
