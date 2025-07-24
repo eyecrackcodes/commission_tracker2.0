@@ -120,7 +120,7 @@ export function generateReconciliationSummary(policies: Policy[]): {
  */
 export function formatAlertMessage(alert: ReconciliationAlert): string {
   const policyInfo = `${alert.policy.client} (${alert.policy.policy_number})`;
-  const amount = `$${alert.policy.commission_due.toFixed(2)}`;
+  const amount = `${alert.policy.commission_due.toFixed(2)}`;
   
   switch (alert.type) {
     case 'verified_missing':

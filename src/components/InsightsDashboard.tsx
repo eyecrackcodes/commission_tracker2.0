@@ -280,7 +280,7 @@ export default function InsightsDashboard() {
     return Array.from(productMap.entries())
       .map(([name, data]) => ({
         name,
-        value: Math.round(data.value),
+        value: data.value,
         count: data.count,
       }))
       .sort((a, b) => b.value - a.value)
@@ -309,8 +309,8 @@ export default function InsightsDashboard() {
     return Array.from(carrierMap.entries())
       .map(([carrier, data]) => ({
         carrier,
-        premium: Math.round(data.premium),
-        commission: Math.round(data.commission),
+        premium: data.premium,
+        commission: data.commission,
         policies: data.policies,
       }))
       .sort((a, b) => b.commission - a.commission);
@@ -412,7 +412,7 @@ export default function InsightsDashboard() {
       );
 
       monthlyMap.set(monthStr, {
-        amount: Math.round(verifiedPoliciesInMonth.reduce((sum, p) => sum + p.commission_due, 0)),
+        amount: verifiedPoliciesInMonth.reduce((sum, p) => sum + p.commission_due, 0),
         count: verifiedPoliciesInMonth.length,
       });
     }
