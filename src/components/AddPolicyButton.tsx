@@ -162,10 +162,8 @@ export default function AddPolicyButton({
     try {
       console.log("Submitting policy data:", data);
 
-      // Calculate commission rate based on tenure
-      const commissionRate = calculateCommissionRate(
-        agentProfile?.start_date || null
-      );
+      // Use the commission rate selected by the user in the form (convert from percentage to decimal)
+      const commissionRate = Number(data.commission_rate) / 100;
 
       const { error } = await supabase.from("policies").insert([
         {
@@ -418,7 +416,11 @@ export default function AddPolicyButton({
                       <select
                         {...register("commission_rate", { required: true })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        defaultValue={agentProfile?.start_date ? "20" : "5"}
+                        defaultValue={
+                          agentProfile?.start_date 
+                            ? (calculateCommissionRate(agentProfile.start_date) * 100).toString()
+                            : "5"
+                        }
                       >
                         <option value="5">5%</option>
                         <option value="20">20%</option>
