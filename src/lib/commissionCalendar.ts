@@ -188,16 +188,16 @@ export function getUpcomingPaymentPeriods(count: number = 3): CommissionPaymentD
 
 // Calculate expected commission for a payment period
 export function calculateExpectedCommissionForPeriod(
-  policies: Array<{ created_at: string; commission_due: number; date_commission_paid: string | null }>,
+  policies: Array<{ created_at: string; commission_due: number; date_policy_verified: string | null }>,
   periodEndDate: string
 ): {
   expectedAmount: number;
   totalAmount: number;
-  paidAmount: number;
+  verifiedAmount: number;
   policyCount: number;
-  paidCount: number;
-  unpaidCount: number;
-  policies: Array<{ created_at: string; commission_due: number; date_commission_paid: string | null }>;
+  verifiedCount: number;
+  unverifiedCount: number;
+  policies: Array<{ created_at: string; commission_due: number; date_policy_verified: string | null }>;
 } {
   const periodEnd = endOfDay(parseISO(periodEndDate));
   
@@ -220,20 +220,20 @@ export function calculateExpectedCommissionForPeriod(
     return isInPeriod;
   });
   
-  const unpaidPolicies = periodPolicies.filter(policy => !policy.date_commission_paid);
-  const paidPolicies = periodPolicies.filter(policy => policy.date_commission_paid);
+  const unverifiedPolicies = periodPolicies.filter(policy => !policy.date_policy_verified);
+  const verifiedPolicies = periodPolicies.filter(policy => policy.date_policy_verified);
   
-  const expectedAmount = unpaidPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
-  const paidAmount = paidPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
-  const totalAmount = expectedAmount + paidAmount;
+  const expectedAmount = unverifiedPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
+  const verifiedAmount = verifiedPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
+  const totalAmount = expectedAmount + verifiedAmount;
   
   return {
     expectedAmount,
     totalAmount,
-    paidAmount,
+    verifiedAmount,
     policyCount: periodPolicies.length,
-    paidCount: paidPolicies.length,
-    unpaidCount: unpaidPolicies.length,
+    verifiedCount: verifiedPolicies.length,
+    unverifiedCount: unverifiedPolicies.length,
     policies: periodPolicies
   };
 } 

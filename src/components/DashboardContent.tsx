@@ -95,7 +95,7 @@ export default function DashboardContent() {
           onPolicyUpdate={handlePolicyUpdate} 
         />
       )}
-      {activeTab === "pipeline" && <CommissionPipeline key={refreshKey} />}
+      {activeTab === "pipeline" && <CommissionPipeline refreshKey={refreshKey} onPolicyUpdate={handlePolicyUpdate} />}
       {activeTab === "insights" && <InsightsDashboard key={refreshKey} />}
       {activeTab === "profile" && <AgentProfile />}
     </div>
