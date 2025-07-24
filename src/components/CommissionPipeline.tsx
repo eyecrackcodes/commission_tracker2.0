@@ -342,12 +342,22 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                   <p>{period.policyCount} {period.policyCount === 1 ? 'policy' : 'policies'}</p>
                   {period.verifiedCount > 0 && (
                     <p className="text-green-600">
-                      ${period.verifiedCommission.toLocaleString()} verified ({period.verifiedCount})
+                      {period.verifiedCommission.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })} verified ({period.verifiedCount})
                     </p>
                   )}
                   {period.unverifiedCount > 0 && (
                     <p className="text-blue-600">
-                      ${period.expectedCommission.toLocaleString()} pending verification ({period.unverifiedCount})
+                      {period.expectedCommission.toLocaleString('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })} pending verification ({period.unverifiedCount})
                     </p>
                   )}
                 </div>
