@@ -6,7 +6,7 @@ export interface CarrierProduct {
 export const carriers: CarrierProduct[] = [
   {
     name: "GTL",
-    products: ["Luminary Life Preferred", "Luminary Life Standard", "Luminary Life Graded", "Luminary Life Guaranteed Issue"],
+    products: ["Preferred", "Standard", "Graded", "Guaranteed Issue"],
   },
   {
     name: "Royal Neighbors of America",
@@ -14,7 +14,7 @@ export const carriers: CarrierProduct[] = [
   },
   {
     name: "American Amicable",
-    products: ["Senior Choice Immediate", "Senior Choice Graded", "Senior Choice ROP"],
+    products: ["Immediate", "Graded", "ROP"],
   },
   {
     name: "SBLI",
