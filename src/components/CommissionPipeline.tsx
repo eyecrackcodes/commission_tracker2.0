@@ -721,23 +721,29 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                 )}
                               </div>
                               <div className="space-y-2">
-                                <label className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer">
+                                <label 
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (isChargeback) return;
+                                    const newAction = policyState?.action === 'on_spreadsheet' ? null : 'on_spreadsheet';
+                                    setReconciliationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        action: newAction
+                                      }
+                                    }));
+                                  }}
+                                >
                                   <input
                                     type="radio"
                                     name={`action-${policy.id}`}
                                     checked={policyState?.action === 'on_spreadsheet'}
-                                    onChange={() => {
-                                      const newAction = policyState?.action === 'on_spreadsheet' ? null : 'on_spreadsheet';
-                                      setReconciliationData(prev => ({
-                                        ...prev,
-                                        [policy.id]: {
-                                          ...prev[policy.id],
-                                          action: newAction
-                                        }
-                                      }));
-                                    }}
-                                    className="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500"
+                                    onChange={() => {}} // Controlled by onClick above
+                                    className="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500 pointer-events-none"
                                     disabled={isChargeback}
+                                    readOnly
                                   />
                                   <div className="flex-1">
                                     <span className="text-sm font-medium text-gray-700">
@@ -747,22 +753,27 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                   </div>
                                 </label>
 
-                                <label className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer">
+                                <label 
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAction = policyState?.action === 'missing_commission' ? null : 'missing_commission';
+                                    setReconciliationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        action: newAction
+                                      }
+                                    }));
+                                  }}
+                                >
                                   <input
                                     type="radio"
                                     name={`action-${policy.id}`}
                                     checked={policyState?.action === 'missing_commission'}
-                                    onChange={() => {
-                                      const newAction = policyState?.action === 'missing_commission' ? null : 'missing_commission';
-                                      setReconciliationData(prev => ({
-                                        ...prev,
-                                        [policy.id]: {
-                                          ...prev[policy.id],
-                                          action: newAction
-                                        }
-                                      }));
-                                    }}
-                                    className="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500"
+                                    onChange={() => {}} // Controlled by onClick above
+                                    className="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500 pointer-events-none"
+                                    readOnly
                                   />
                                   <div className="flex-1">
                                     <span className="text-sm font-medium text-gray-700">
@@ -772,24 +783,29 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                   </div>
                                 </label>
 
-                                <label className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer">
+                                <label 
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAction = policyState?.action === 'request_removal' ? null : 'request_removal';
+                                    setReconciliationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        action: newAction,
+                                        // Clear removal reason if unchecking
+                                        removalReason: newAction === 'request_removal' ? prev[policy.id]?.removalReason || '' : ''
+                                      }
+                                    }));
+                                  }}
+                                >
                                   <input
                                     type="radio"
                                     name={`action-${policy.id}`}
                                     checked={policyState?.action === 'request_removal'}
-                                    onChange={() => {
-                                      const newAction = policyState?.action === 'request_removal' ? null : 'request_removal';
-                                      setReconciliationData(prev => ({
-                                        ...prev,
-                                        [policy.id]: {
-                                          ...prev[policy.id],
-                                          action: newAction,
-                                          // Clear removal reason if unchecking
-                                          removalReason: newAction === 'request_removal' ? prev[policy.id]?.removalReason || '' : ''
-                                        }
-                                      }));
-                                    }}
-                                    className="h-4 w-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                                    onChange={() => {}} // Controlled by onClick above
+                                    className="h-4 w-4 text-orange-600 border-gray-300 focus:ring-orange-500 pointer-events-none"
+                                    readOnly
                                   />
                                   <div className="flex-1">
                                     <span className="text-sm font-medium text-gray-700">
