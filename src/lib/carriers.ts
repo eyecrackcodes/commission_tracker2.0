@@ -10,7 +10,7 @@ export const carriers: CarrierProduct[] = [
   },
   {
     name: "Royal Neighbors of America",
-    products: ["Whole Life Graded", "Whole Life GI", "Term"],
+    products: ["Graded", "Guaranteed Issue", "Standard", "Preferred", "Term"],
   },
   {
     name: "American Amicable",
