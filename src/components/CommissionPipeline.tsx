@@ -236,6 +236,10 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
       setReconciliationMode(false);
       setReconciliationData({});
       
+      // Mark reconciliation as completed for this payment period
+      const completionKey = `reconciliation-completed-${selectedPeriod.paymentDate}`;
+      localStorage.setItem(completionKey, new Date().toISOString());
+      
       // Show success message  
       let message = "Reconciliation completed!";
       if (updates.length > 0) {

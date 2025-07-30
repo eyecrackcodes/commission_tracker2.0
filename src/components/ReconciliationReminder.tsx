@@ -31,7 +31,11 @@ export default function ReconciliationReminder({ onStartReconciliation }: Reconc
         (today >= reconciliationStart && today <= reconciliationEnd)
       );
 
-      if (isReconciliationPeriod) {
+      // Check if reconciliation has already been completed for this payment period
+      const completionKey = `reconciliation-completed-${nextPayment.date}`;
+      const isCompleted = localStorage.getItem(completionKey);
+
+      if (isReconciliationPeriod && !isCompleted) {
         setShowReminder(true);
         setNextPaymentDate(nextPayment.date);
         setDaysUntilPayment(Math.ceil((paymentDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
@@ -45,6 +49,14 @@ export default function ReconciliationReminder({ onStartReconciliation }: Reconc
     setShowReminder(false);
     // Store dismissal in localStorage to avoid showing again today
     localStorage.setItem(`reconciliation-dismissed-${new Date().toDateString()}`, 'true');
+  };
+
+  const handleMarkComplete = () => {
+    if (nextPaymentDate) {
+      const completionKey = `reconciliation-completed-${nextPaymentDate}`;
+      localStorage.setItem(completionKey, new Date().toISOString());
+    }
+    setShowReminder(false);
   };
 
   const handleStartReconciliation = () => {
@@ -115,18 +127,24 @@ export default function ReconciliationReminder({ onStartReconciliation }: Reconc
             </div>
 
             {/* Action buttons */}
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
                 onClick={handleDismiss}
-                className="flex-1 px-4 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                className="flex-1 px-3 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors text-sm"
               >
                 Remind Me Later
               </button>
               <button
-                onClick={handleStartReconciliation}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg"
+                onClick={handleMarkComplete}
+                className="flex-1 px-3 py-3 text-green-700 bg-green-100 hover:bg-green-200 rounded-lg font-medium transition-colors text-sm"
               >
-                🚀 Start Reconciliation
+                ✅ Mark Complete
+              </button>
+              <button
+                onClick={handleStartReconciliation}
+                className="flex-1 px-3 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg text-sm"
+              >
+                🚀 Start Now
               </button>
             </div>
 

@@ -30,8 +30,14 @@ export default function ReconciliationBadge({ onClick }: ReconciliationBadgeProp
         (today >= reconciliationStart && today <= reconciliationEnd)
       );
 
+      // Check if reconciliation has already been completed for this payment period
+      const completionKey = `reconciliation-completed-${nextPayment.date}`;
+      const isCompleted = localStorage.getItem(completionKey);
+
+      const shouldShow = isReconciliationTime && !isCompleted;
+      
       setIsReconciliationPeriod(isReconciliationTime);
-      setShowBadge(isReconciliationTime);
+      setShowBadge(shouldShow);
     };
 
     checkReconciliationStatus();
