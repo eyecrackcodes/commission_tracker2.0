@@ -11,6 +11,12 @@ import {
 } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
 import { detectChargeback } from "@/lib/chargeback";
+import { 
+  ReconciliationFormData,
+  ReconciliationOptions,
+  ReconciliationSummary,
+  SlackNotificationGroup
+} from "@/types/reconciliation";
 
 interface PipelineData {
   paymentDate: string;
@@ -36,9 +42,12 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PipelineData | null>(null);
   const [reconciliationMode, setReconciliationMode] = useState(false);
-  const [reconciliationData, setReconciliationData] = useState<{[key: number]: boolean}>({});
-  const [slackNotificationData, setSlackNotificationData] = useState<{[key: number]: boolean}>({});
-  const [removalRequests, setRemovalRequests] = useState<{[key: number]: string}>({});
+  const [reconciliationData, setReconciliationData] = useState<ReconciliationFormData>({});
+  const [reconciliationOptions, setReconciliationOptions] = useState<ReconciliationOptions>({
+    sendCompletionNotification: false,
+    groupSimilarIssues: true,
+    markAllAsProcessed: true
+  });
   const { user } = useUser();
 
   const fetchPolicies = useCallback(async () => {
@@ -63,66 +72,123 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
     }
   }, [user]);
 
+  const calculateReconciliationSummary = (): ReconciliationSummary => {
+    const summary = {
+      onSpreadsheet: 0,
+      missingCommission: 0,
+      requestRemoval: 0,
+      totalPolicies: 0,
+      totalCommission: 0
+    };
+
+    Object.values(reconciliationData).forEach(policyState => {
+      const policy = selectedPeriod?.policies.find(p => p.id === policyState.policyId);
+      if (!policy) return;
+
+      summary.totalPolicies++;
+      summary.totalCommission += policy.commission_due;
+
+      switch (policyState.action) {
+        case 'on_spreadsheet':
+          summary.onSpreadsheet++;
+          break;
+        case 'missing_commission':
+          summary.missingCommission++;
+          break;
+        case 'request_removal':
+          summary.requestRemoval++;
+          break;
+      }
+    });
+
+    return summary;
+  };
+
+  const groupSlackNotifications = (): SlackNotificationGroup[] => {
+    const groups: SlackNotificationGroup[] = [];
+    
+    const missingCommissions: SlackNotificationGroup['policies'] = [];
+    const removalRequests: SlackNotificationGroup['policies'] = [];
+    const completedPolicies: SlackNotificationGroup['policies'] = [];
+
+    Object.values(reconciliationData).forEach(policyState => {
+      const policy = selectedPeriod?.policies.find(p => p.id === policyState.policyId);
+      if (!policy) return;
+
+      const policyData = {
+        policyId: policy.id,
+        client: policy.client,
+        policyNumber: policy.policy_number,
+        carrier: policy.carrier,
+        product: policy.product,
+        commission: policy.commission_due,
+        priority: policyState.priority,
+        reason: policyState.removalReason,
+        status: policy.policy_status
+      };
+
+      switch (policyState.action) {
+        case 'missing_commission':
+          missingCommissions.push(policyData);
+          break;
+        case 'request_removal':
+          removalRequests.push(policyData);
+          break;
+        case 'on_spreadsheet':
+          completedPolicies.push(policyData);
+          break;
+      }
+    });
+
+    if (missingCommissions.length > 0) {
+      groups.push({
+        type: 'missing_commission',
+        policies: missingCommissions,
+        totalAmount: missingCommissions.reduce((sum, p) => sum + p.commission, 0)
+      });
+    }
+
+    if (removalRequests.length > 0) {
+      groups.push({
+        type: 'removal_request',
+        policies: removalRequests,
+        totalAmount: removalRequests.reduce((sum, p) => sum + p.commission, 0)
+      });
+    }
+
+    if (reconciliationOptions.sendCompletionNotification && completedPolicies.length > 0) {
+      groups.push({
+        type: 'reconciliation_complete',
+        policies: completedPolicies,
+        totalAmount: completedPolicies.reduce((sum, p) => sum + p.commission, 0)
+      });
+    }
+
+    return groups;
+  };
+
   const handleReconciliation = async () => {
     if (!user || !selectedPeriod) return;
 
     try {
       const updates = [];
-      const discrepancies = [];
-      const slackNotifications = [];
-      const removals = [];
+      const slackGroups = groupSlackNotifications();
       
-      for (const [policyIdStr, isPaid] of Object.entries(reconciliationData)) {
-        const policyId = parseInt(policyIdStr);
-        const policy = selectedPeriod.policies.find(p => p.id === policyId);
-        
-        if (policy) {
-          if (isPaid && !policy.date_policy_verified) {
-            // Policy is on spreadsheet but not verified in app - update verification
-            updates.push({
-              id: policyId,
-              date_policy_verified: new Date().toISOString()
-            });
-          } else if (!isPaid && policy.date_policy_verified) {
-            // Policy is verified in app but not on spreadsheet - flag discrepancy
-            discrepancies.push({
-              policyId: policy.id,
-              client: policy.client,
-              policyNumber: policy.policy_number,
-              carrier: policy.carrier,
-              commission: policy.commission_due,
-              reason: 'verified_but_not_on_spreadsheet'
-            });
-          }
+      // Process database updates
+      for (const [, policyState] of Object.entries(reconciliationData)) {
+        const policy = selectedPeriod.policies.find(p => p.id === policyState.policyId);
+        if (!policy) continue;
 
-          // Check for Slack notification requests
-          if (slackNotificationData[policyId]) {
-            slackNotifications.push({
-              policyId: policy.id,
-              client: policy.client,
-              policyNumber: policy.policy_number,
-              carrier: policy.carrier,
-              commission: policy.commission_due,
-              status: policy.policy_status,
-              reason: 'missing_commission_notification'
-            });
-          }
-
-          // Check for removal requests
-          if (removalRequests[policyId]?.trim()) {
-            removals.push({
-              policyId: policy.id,
-              client: policy.client,
-              policyNumber: policy.policy_number,
-              carrier: policy.carrier,
-              commission: policy.commission_due,
-              reason: removalRequests[policyId].trim()
-            });
-          }
+        if (policyState.action === 'on_spreadsheet' && !policy.date_policy_verified) {
+          // Policy is on spreadsheet but not verified in app - update verification
+          updates.push({
+            id: policyState.policyId,
+            date_policy_verified: new Date().toISOString()
+          });
         }
       }
 
-      // Update verified policies
+      // Update verified policies in database
       if (updates.length > 0) {
         for (const update of updates) {
           const { error } = await supabase
@@ -140,9 +206,8 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
         }
       }
 
-      // Send Slack notifications for all types of issues
-      const allSlackIssues = [...discrepancies, ...slackNotifications, ...removals];
-      if (allSlackIssues.length > 0) {
+      // Send consolidated Slack notifications
+      if (slackGroups.length > 0) {
         try {
           const response = await fetch('/api/slack-notification', {
             method: 'POST',
@@ -150,9 +215,10 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              type: 'reconciliation_alert',
+              type: 'reconciliation_alert_v2',
               data: {
-                discrepancies: allSlackIssues
+                groups: slackGroups,
+                paymentPeriod: selectedPeriod.paymentDate
               }
             }),
           });
@@ -169,18 +235,18 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
 
       setReconciliationMode(false);
       setReconciliationData({});
-      setSlackNotificationData({});
-      setRemovalRequests({});
       
-      // Show success message
-      const updatedCount = updates.length;
-      const issueCount = allSlackIssues.length;
+      // Mark reconciliation as completed for this payment period
+      const completionKey = `reconciliation-completed-${selectedPeriod.paymentDate}`;
+      localStorage.setItem(completionKey, new Date().toISOString());
+      
+      // Show success message  
       let message = "Reconciliation completed!";
-      if (updatedCount > 0) {
-        message += ` ${updatedCount} ${updatedCount === 1 ? 'policy' : 'policies'} verified.`;
+      if (updates.length > 0) {
+        message += ` ${updates.length} ${updates.length === 1 ? 'policy' : 'policies'} verified.`;
       }
-      if (issueCount > 0) {
-        message += ` ${issueCount} ${issueCount === 1 ? 'issue' : 'issues'} reported to Slack.`;
+      if (slackGroups.length > 0) {
+        message += ` ${slackGroups.length} notification${slackGroups.length === 1 ? '' : 's'} sent to Slack.`;
       }
       
       console.log(message);
@@ -457,17 +523,17 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                     <button
                       onClick={() => {
                         setReconciliationMode(true);
-                        const initialData: {[key: number]: boolean} = {};
-                        const initialSlackData: {[key: number]: boolean} = {};
-                        const initialRemovalData: {[key: number]: string} = {};
+                        const initialData: ReconciliationFormData = {};
                         selectedPeriod.policies.forEach(policy => {
-                          initialData[policy.id] = !!policy.date_policy_verified;
-                          initialSlackData[policy.id] = false;
-                          initialRemovalData[policy.id] = '';
+                          initialData[policy.id] = {
+                            policyId: policy.id,
+                            action: policy.date_policy_verified ? 'on_spreadsheet' : null,
+                            priority: 'normal',
+                            removalReason: '',
+                            notes: ''
+                          };
                         });
                         setReconciliationData(initialData);
-                        setSlackNotificationData(initialSlackData);
-                        setRemovalRequests(initialRemovalData);
                       }}
                       className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm font-medium transition-colors"
                     >
@@ -479,8 +545,6 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                       setSelectedPeriod(null);
                       setReconciliationMode(false);
                       setReconciliationData({});
-                      setSlackNotificationData({});
-                      setRemovalRequests({});
                     }}
                     className="text-white/80 hover:text-white"
                   >
@@ -495,86 +559,164 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
               {reconciliationMode ? (
                 <div className="space-y-6">
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  {/* Header with improved instructions */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-start">
-                      <svg className="h-5 w-5 text-yellow-400 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <svg className="h-5 w-5 text-blue-400 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
-                        <h3 className="text-sm font-medium text-yellow-800">Commission Spreadsheet Reconciliation</h3>
-                        <p className="text-sm text-yellow-700 mt-1">
-                          Check each policy below that appears on your commission spreadsheet for this period. 
+                        <h3 className="text-sm font-medium text-blue-800">Commission Spreadsheet Reconciliation</h3>
+                        <p className="text-sm text-blue-700 mt-1">
+                          For each policy, select one action: confirm it&apos;s on the spreadsheet, report missing commission, or request removal.
                           Policies in red are chargebacks (cancelled within 30 days).
                         </p>
                       </div>
                     </div>
                   </div>
 
+                  {/* Progress indicator */}
+                  {(() => {
+                    const summary = calculateReconciliationSummary();
+                    const completedActions = summary.onSpreadsheet + summary.missingCommission + summary.requestRemoval;
+                    const totalPolicies = selectedPeriod.policies.length;
+                    const progressPercent = totalPolicies > 0 ? (completedActions / totalPolicies) * 100 : 0;
+                    
+                    return (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            Progress: {completedActions} of {totalPolicies} policies reviewed
+                          </span>
+                          <span className="text-sm text-gray-500">{Math.round(progressPercent)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${progressPercent}%` }}
+                          ></div>
+                        </div>
+                        {completedActions > 0 && (
+                          <div className="flex gap-4 mt-2 text-xs text-gray-600">
+                            <span>✅ On Spreadsheet: {summary.onSpreadsheet}</span>
+                            <span>🚨 Missing: {summary.missingCommission}</span>
+                            <span>📝 Removal: {summary.requestRemoval}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Reconciliation Options */}
+                  {(() => {
+                    const summary = calculateReconciliationSummary();
+                    const hasIssues = summary.missingCommission > 0 || summary.requestRemoval > 0;
+                    const allOnSpreadsheet = summary.onSpreadsheet === summary.totalPolicies && summary.totalPolicies > 0;
+                    
+                    return (
+                      <div className={`border rounded-lg p-4 ${
+                        allOnSpreadsheet ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        <h4 className={`text-sm font-medium mb-3 ${
+                          allOnSpreadsheet ? 'text-green-800' : 'text-gray-700'
+                        }`}>Notification Options</h4>
+                        <div className="space-y-2">
+                          <label className={`flex items-center gap-2 ${hasIssues ? 'opacity-50' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={reconciliationOptions.sendCompletionNotification && !hasIssues}
+                              disabled={hasIssues}
+                              onChange={(e) => {
+                                const isChecked = e.target.checked;
+                                setReconciliationOptions(prev => ({
+                                  ...prev,
+                                  sendCompletionNotification: isChecked
+                                }));
+                                
+                                // If checking completion notification, auto-mark all policies as "On Spreadsheet"
+                                if (isChecked && selectedPeriod) {
+                                  setReconciliationData(prev => {
+                                    const updated = { ...prev };
+                                    selectedPeriod.policies.forEach(policy => {
+                                      if (!detectChargeback(policy).isChargeback) {
+                                        updated[policy.id] = {
+                                          ...updated[policy.id],
+                                          action: 'on_spreadsheet'
+                                        };
+                                      }
+                                    });
+                                    return updated;
+                                  });
+                                }
+                              }}
+                              className="h-4 w-4 text-green-600 rounded border-gray-300 focus:ring-green-500 disabled:opacity-50"
+                            />
+                            <span className={`text-sm ${
+                              allOnSpreadsheet ? 'text-green-700' : hasIssues ? 'text-gray-500' : 'text-gray-700'
+                            }`}>
+                              📬 Send completion notification to Slack (confirms all verified commissions are correct)
+                            </span>
+                          </label>
+                          {hasIssues && (
+                            <p className="text-xs text-orange-600 ml-6">
+                              ⚠️ Cannot send completion notification when reporting issues or requesting removals
+                            </p>
+                          )}
+                          {allOnSpreadsheet && !hasIssues && (
+                            <p className="text-xs text-green-600 ml-6">
+                              ✅ All policies marked as correct - completion notification available
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Policy list with improved UI */}
                   <div className="space-y-3">
                     {selectedPeriod.policies.map((policy) => {
                       const { isChargeback } = detectChargeback(policy);
-                      const verificationMismatch = policy.date_policy_verified && !reconciliationData[policy.id];
+                      const policyState = reconciliationData[policy.id];
+                      const hasAction = policyState?.action !== null;
                       
                       return (
                         <div 
                           key={policy.id} 
-                          className={`border rounded-lg p-4 ${
+                          className={`border rounded-lg p-4 transition-all ${
                             isChargeback ? 'bg-red-50 border-red-200' : 
-                            verificationMismatch ? 'bg-orange-50 border-orange-200' :
-                            'bg-white border-gray-200'
+                            hasAction ? 'bg-green-50 border-green-200' :
+                            'bg-white border-gray-200 border-2 border-dashed'
                           }`}
                         >
-                          <div className="space-y-3">
-                            {/* Main Policy Information */}
+                          <div className="space-y-4">
+                            {/* Policy Header */}
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
-                                <div className="flex items-center gap-3">
-                                  <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <input
-                                        type="checkbox"
-                                        checked={reconciliationData[policy.id] || false}
-                                        onChange={(e) => setReconciliationData(prev => ({
-                                          ...prev,
-                                          [policy.id]: e.target.checked
-                                        }))}
-                                        className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                        disabled={isChargeback}
-                                      />
-                                      <label className="text-sm font-medium text-gray-700">
-                                        On Spreadsheet
-                                      </label>
-                                    </div>
-                                    <p className="font-medium text-gray-900">{policy.client}</p>
-                                    <div className="text-sm text-gray-600 space-y-1">
-                                      <p><span className="font-medium">Policy:</span> {policy.policy_number}</p>
-                                      <p><span className="font-medium">Carrier:</span> {policy.carrier} • {policy.product}</p>
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium">Status:</span>
-                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                          policy.policy_status === 'Active' ? 'bg-green-100 text-green-800' :
-                                          policy.policy_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                                          'bg-red-100 text-red-800'
-                                        }`}>
-                                          {policy.policy_status}
-                                        </span>
-                                      </div>
-                                      {policy.date_policy_verified && (
-                                        <p><span className="font-medium">Verified:</span> {format(parseISO(policy.date_policy_verified), 'MMM d, yyyy')}</p>
-                                      )}
-                                    </div>
-                                    {isChargeback && (
-                                      <p className="text-xs text-red-600 font-medium mt-2">
-                                        ⚠️ CHARGEBACK - Cancelled within 30 days
-                                      </p>
-                                    )}
-                                    {verificationMismatch && (
-                                      <p className="text-xs text-orange-600 font-medium mt-2">
-                                        ⚠️ Verified in app but not checked for spreadsheet
-                                      </p>
+                                <h4 className="font-medium text-gray-900">{policy.client}</h4>
+                                <div className="text-sm text-gray-600 space-y-1 mt-1">
+                                  <p><span className="font-medium">Policy:</span> {policy.policy_number}</p>
+                                  <p><span className="font-medium">Carrier:</span> {policy.carrier} • {policy.product}</p>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">Status:</span>
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                      policy.policy_status === 'Active' ? 'bg-green-100 text-green-800' :
+                                      policy.policy_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-red-100 text-red-800'
+                                    }`}>
+                                      {policy.policy_status}
+                                    </span>
+                                    {policy.date_policy_verified && (
+                                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                        ✓ Verified
+                                      </span>
                                     )}
                                   </div>
                                 </div>
+                                {isChargeback && (
+                                  <div className="mt-2 text-xs text-red-600 font-medium">
+                                    ⚠️ CHARGEBACK - Cancelled within 30 days
+                                  </div>
+                                )}
                               </div>
                               <div className="text-right">
                                 <p className={`text-xl font-semibold ${isChargeback ? 'text-red-600' : 'text-gray-900'}`}>
@@ -591,47 +733,170 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                               </div>
                             </div>
 
-                            {/* Slack Notification Controls */}
-                            <div className="pt-2 border-t border-gray-200">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={slackNotificationData[policy.id] || false}
-                                    onChange={(e) => setSlackNotificationData(prev => ({
+                            {/* Action Selection - Radio Buttons */}
+                            <div className="border-t pt-3">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium text-gray-700">Reconciliation Action:</div>
+                                {policyState?.action && (
+                                  <div className="text-xs text-gray-500">
+                                    💡 Click again to uncheck and come back later
+                                  </div>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                <label 
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    if (isChargeback) return;
+                                    const newAction = policyState?.action === 'on_spreadsheet' ? null : 'on_spreadsheet';
+                                    setReconciliationData(prev => ({
                                       ...prev,
-                                      [policy.id]: e.target.checked
-                                    }))}
-                                    className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        action: newAction
+                                      }
+                                    }));
+                                  }}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`action-${policy.id}`}
+                                    checked={policyState?.action === 'on_spreadsheet'}
+                                    onChange={() => {}} // Controlled by onClick above
+                                    className="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500 pointer-events-none"
+                                    disabled={isChargeback}
+                                    readOnly
                                   />
-                                  <label className="text-sm font-medium text-gray-700">
-                                    🚨 Send Slack Alert (Missing Commission)
+                                  <div className="flex-1">
+                                    <span className="text-sm font-medium text-gray-700">
+                                      ✅ On Spreadsheet (Commission Correct)
+                                    </span>
+                                    <p className="text-xs text-gray-500">Policy exists on spreadsheet with correct commission amount</p>
+                                  </div>
+                                </label>
+
+                                <label 
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAction = policyState?.action === 'missing_commission' ? null : 'missing_commission';
+                                    setReconciliationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        action: newAction
+                                      }
+                                    }));
+                                    
+                                    // Auto-uncheck completion notification if marking as missing commission
+                                    if (newAction === 'missing_commission') {
+                                      setReconciliationOptions(prev => ({
+                                        ...prev,
+                                        sendCompletionNotification: false
+                                      }));
+                                    }
+                                  }}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`action-${policy.id}`}
+                                    checked={policyState?.action === 'missing_commission'}
+                                    onChange={() => {}} // Controlled by onClick above
+                                    className="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500 pointer-events-none"
+                                    readOnly
+                                  />
+                                  <div className="flex-1">
+                                    <span className="text-sm font-medium text-gray-700">
+                                      🚨 Missing Commission / Incorrect Amount
+                                    </span>
+                                    <p className="text-xs text-gray-500">Policy missing from spreadsheet or commission amount is wrong</p>
+                                  </div>
+                                </label>
+
+                                <label 
+                                  className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const newAction = policyState?.action === 'request_removal' ? null : 'request_removal';
+                                    setReconciliationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        action: newAction,
+                                        // Clear removal reason if unchecking
+                                        removalReason: newAction === 'request_removal' ? prev[policy.id]?.removalReason || '' : ''
+                                      }
+                                    }));
+                                    
+                                    // Auto-uncheck completion notification if requesting removal
+                                    if (newAction === 'request_removal') {
+                                      setReconciliationOptions(prev => ({
+                                        ...prev,
+                                        sendCompletionNotification: false
+                                      }));
+                                    }
+                                  }}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`action-${policy.id}`}
+                                    checked={policyState?.action === 'request_removal'}
+                                    onChange={() => {}} // Controlled by onClick above
+                                    className="h-4 w-4 text-orange-600 border-gray-300 focus:ring-orange-500 pointer-events-none"
+                                    readOnly
+                                  />
+                                  <div className="flex-1">
+                                    <span className="text-sm font-medium text-gray-700">
+                                      📝 Request Removal
+                                    </span>
+                                    <p className="text-xs text-gray-500">Policy should be removed from spreadsheet</p>
+                                  </div>
+                                </label>
+                              </div>
+
+                              {/* Priority and Removal Reason */}
+                              {policyState?.action === 'missing_commission' && (
+                                <div className="mt-3 p-3 bg-red-50 rounded-md">
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={policyState.priority === 'urgent'}
+                                      onChange={(e) => setReconciliationData(prev => ({
+                                        ...prev,
+                                        [policy.id]: {
+                                          ...prev[policy.id],
+                                          priority: e.target.checked ? 'urgent' : 'normal'
+                                        }
+                                      }))}
+                                      className="h-4 w-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                                    />
+                                    <span className="text-sm font-medium text-red-700">⚡ Mark as Urgent</span>
                                   </label>
                                 </div>
-                              </div>
-                              <p className="text-xs text-gray-500 mt-1 ml-6">
-                                Check this to notify the team about missing commission or discrepancies
-                              </p>
-                            </div>
+                              )}
 
-                            {/* Removal Request Input */}
-                            <div className="pt-2 border-t border-gray-200">
-                              <label className="block text-sm font-medium text-gray-700 mb-2">
-                                📝 Request Policy Removal (Optional)
-                              </label>
-                              <textarea
-                                value={removalRequests[policy.id] || ''}
-                                onChange={(e) => setRemovalRequests(prev => ({
-                                  ...prev,
-                                  [policy.id]: e.target.value
-                                }))}
-                                placeholder="Explain why this policy should be removed from the spreadsheet (e.g., client cancelled, refund issued, etc.)"
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                rows={2}
-                              />
-                              <p className="text-xs text-gray-500 mt-1">
-                                This will send a Slack message requesting removal with your explanation
-                              </p>
+                              {policyState?.action === 'request_removal' && (
+                                <div className="mt-3">
+                                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Removal Reason (Required)
+                                  </label>
+                                  <textarea
+                                    value={policyState.removalReason}
+                                    onChange={(e) => setReconciliationData(prev => ({
+                                      ...prev,
+                                      [policy.id]: {
+                                        ...prev[policy.id],
+                                        removalReason: e.target.value
+                                      }
+                                    }))}
+                                    placeholder="Explain why this policy should be removed (e.g., client cancelled, refund processed, duplicate entry, etc.)"
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                                    rows={2}
+                                    required
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -639,24 +904,47 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                     })}
                   </div>
 
+                  {/* Action Buttons */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                     <button
                       onClick={() => {
                         setReconciliationMode(false);
                         setReconciliationData({});
-                        setSlackNotificationData({});
-                        setRemovalRequests({});
                       }}
                       className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
                     >
                       Cancel
                     </button>
-                    <button
-                      onClick={handleReconciliation}
-                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
-                    >
-                      🔄 Process Reconciliation
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {(() => {
+                        const summary = calculateReconciliationSummary();
+                        const completedActions = summary.onSpreadsheet + summary.missingCommission + summary.requestRemoval;
+                        const totalPolicies = selectedPeriod.policies.length;
+                        const allComplete = completedActions === totalPolicies;
+                        const hasRemovalWithoutReason = Object.values(reconciliationData).some(
+                          state => state.action === 'request_removal' && !state.removalReason.trim()
+                        );
+
+                        return (
+                          <>
+                            <span className="text-sm text-gray-500">
+                              {completedActions}/{totalPolicies} policies reviewed
+                            </span>
+                            <button
+                              onClick={handleReconciliation}
+                              disabled={!allComplete || hasRemovalWithoutReason}
+                              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                                allComplete && !hasRemovalWithoutReason
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              }`}
+                            >
+                              🔄 Process Reconciliation
+                            </button>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               ) : (
