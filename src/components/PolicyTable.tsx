@@ -402,8 +402,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         finalPolicyStatus = 'Active'; // Automatically set to Active when verified
       }
 
-      // Check if policy is being cancelled for Slack alert
-      const isBeingCancelled = finalPolicyStatus === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled';
+      // No longer tracking cancellation status - Slack alerts only from NotificationCenter
 
       // Format the data for update
       const formattedData = {
@@ -451,36 +450,8 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         throw error;
       }
 
-      // Send Slack alert if policy is being cancelled
-      if (isBeingCancelled) {
-        try {
-          const response = await fetch('/api/slack-notification', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              type: 'cancellation_alert',
-              data: {
-                policyNumber: editingPolicy.policy_number,
-                client: editingPolicy.client,
-                carrier: editingPolicy.carrier,
-                commissionAmount: editingPolicy.commission_due,
-                cancelledDate: new Date().toISOString()
-              }
-            }),
-          });
-
-          if (response.ok) {
-            console.log('Cancellation alert sent to Slack successfully');
-          } else {
-            console.error('Failed to send cancellation alert to Slack');
-          }
-        } catch (slackError) {
-          console.error('Error sending Slack cancellation alert:', slackError);
-          // Don't fail the policy update if Slack fails
-        }
-      }
+      // Note: Slack notifications for cancellations only sent from NotificationCenter
+      // PolicyTable cancellations are internal agent updates and don't require Slack alerts
 
       // Refresh policies
       await fetchPolicies();
