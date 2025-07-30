@@ -121,6 +121,61 @@ When payment period arrives:
 - Report discrepancies to commission team
 - Use for reconciliation and audit purposes
 
+## 🔄 Commission Reconciliation System
+
+### Automated Reconciliation Reminders
+The system now provides **intelligent reconciliation reminders** to ensure you never miss commission verification deadlines:
+
+#### **When Commission Sheets Are Released**
+- **Timing**: 9 days before payment (e.g., July 30 for August 8 payment)
+- **Animated Modal**: Money animations (💰💵🤑) with clear call-to-action
+- **Floating Badge**: Persistent on-screen reminder until completed
+- **Auto-Navigation**: Takes you directly to reconciliation workflow
+
+#### **Smart Completion Tracking**
+- **One-Time Process**: Complete reconciliation once, reminders stop
+- **Per-Payment Period**: Separate tracking for each payment date
+- **Cross-Device**: Completion tracked per device/browser
+
+### Reconciliation Workflow (Pipeline Tab)
+
+#### **Starting Reconciliation**
+1. Click **"📊 Reconcile Spreadsheet"** button in upcoming payment period
+2. Review each policy against the commission spreadsheet
+3. Select one action per policy:
+   - **✅ On Spreadsheet (Commission Correct)**: Policy exists with right amount
+   - **🚨 Missing Commission / Incorrect Amount**: Report discrepancies  
+   - **📝 Request Removal**: Policy should be removed from spreadsheet
+
+#### **Smart Workflow Features**
+- **Radio Button Selection**: Clear, conflict-free choices
+- **Uncheck to Return Later**: Click again to deselect and come back
+- **Progress Tracking**: Shows "X of Y policies reviewed" 
+- **Smart Validation**: Process button only enabled when all policies reviewed
+
+#### **Quick "Everything Correct" Workflow**
+1. Check **"📬 Send completion notification to Slack"**
+2. **Auto-marks all policies** as "On Spreadsheet" 
+3. **Process button activates** immediately
+4. Perfect for when all commissions match perfectly
+
+#### **Conflict Prevention**
+- **Auto-uncheck logic**: Marking any policy as missing/removal automatically unchecks completion notification
+- **Visual feedback**: Green sections when all correct, warnings when conflicts exist
+- **Clear messaging**: Explains why options are disabled/enabled
+
+#### **Consolidated Slack Notifications**
+Instead of scattered alerts, the system sends **professional, grouped messages**:
+- **🚨 Missing Commission Alert**: Lists all missing/incorrect commissions with [URGENT] flags
+- **📝 Removal Request**: Groups removal requests with detailed reasons
+- **✅ Reconciliation Complete**: Confirms all verified commissions are accurate
+
+#### **Enhanced User Experience**
+- **Visual Hierarchy**: Green borders for completed, dashed for pending
+- **Priority Flagging**: Mark urgent issues for immediate attention
+- **Required Explanations**: Removal requests require detailed reasons
+- **Real-time Updates**: UI changes immediately as selections are made
+
 ### 🚨 Red Flag Indicators
 **Investigate immediately if:**
 - Policy shows in payment period but no commission paid
@@ -186,6 +241,7 @@ Use commission verification to identify at-risk clients:
 ### Weekly Tasks
 - [ ] **Pipeline Analysis**: Review next 3 payment periods
 - [ ] **Client Follow-ups**: Contact clients with pending policies
+- [ ] **Commission Reconciliation**: Complete when spreadsheets are available
 - [ ] **Data Cleanup**: Correct any date or status errors
 - [ ] **Performance Review**: Check insights for trends
 
