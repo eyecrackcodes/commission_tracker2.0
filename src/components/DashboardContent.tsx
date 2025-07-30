@@ -6,6 +6,8 @@ import AgentProfile from "@/components/AgentProfile";
 import InsightsDashboard from "@/components/InsightsDashboard";
 import CommissionPipeline from "@/components/CommissionPipeline";
 import NotificationCenter from "@/components/NotificationCenter";
+import ReconciliationReminder from "@/components/ReconciliationReminder";
+import ReconciliationBadge from "@/components/ReconciliationBadge";
 
 export default function DashboardContent() {
   const [activeTab, setActiveTab] = useState<
@@ -32,6 +34,10 @@ export default function DashboardContent() {
       policyTableRef.current?.viewPolicy(policyId);
     }, 100); // Small delay to ensure tab switch completes
   }, [activeTab]);
+
+  const handleStartReconciliation = useCallback(() => {
+    setActiveTab("pipeline");
+  }, []);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -98,6 +104,10 @@ export default function DashboardContent() {
       {activeTab === "pipeline" && <CommissionPipeline refreshKey={refreshKey} onPolicyUpdate={handlePolicyUpdate} />}
       {activeTab === "insights" && <InsightsDashboard key={refreshKey} />}
       {activeTab === "profile" && <AgentProfile />}
+
+      {/* Reconciliation Reminder System */}
+      <ReconciliationReminder onStartReconciliation={handleStartReconciliation} />
+      <ReconciliationBadge onClick={handleStartReconciliation} />
     </div>
   );
 }

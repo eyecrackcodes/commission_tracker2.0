@@ -622,10 +622,29 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                               type="checkbox"
                               checked={reconciliationOptions.sendCompletionNotification && !hasIssues}
                               disabled={hasIssues}
-                              onChange={(e) => setReconciliationOptions(prev => ({
-                                ...prev,
-                                sendCompletionNotification: e.target.checked
-                              }))}
+                              onChange={(e) => {
+                                const isChecked = e.target.checked;
+                                setReconciliationOptions(prev => ({
+                                  ...prev,
+                                  sendCompletionNotification: isChecked
+                                }));
+                                
+                                // If checking completion notification, auto-mark all policies as "On Spreadsheet"
+                                if (isChecked && selectedPeriod) {
+                                  setReconciliationData(prev => {
+                                    const updated = { ...prev };
+                                    selectedPeriod.policies.forEach(policy => {
+                                      if (!detectChargeback(policy).isChargeback) {
+                                        updated[policy.id] = {
+                                          ...updated[policy.id],
+                                          action: 'on_spreadsheet'
+                                        };
+                                      }
+                                    });
+                                    return updated;
+                                  });
+                                }
+                              }}
                               className="h-4 w-4 text-green-600 rounded border-gray-300 focus:ring-green-500 disabled:opacity-50"
                             />
                             <span className={`text-sm ${
