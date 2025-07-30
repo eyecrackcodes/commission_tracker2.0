@@ -17,6 +17,7 @@ import {
   ReconciliationSummary,
   SlackNotificationGroup
 } from "@/types/reconciliation";
+import { normalizeProductName } from "@/lib/productNormalization";
 
 interface PipelineData {
   paymentDate: string;
@@ -695,7 +696,7 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                 <h4 className="font-medium text-gray-900">{policy.client}</h4>
                                 <div className="text-sm text-gray-600 space-y-1 mt-1">
                                   <p><span className="font-medium">Policy:</span> {policy.policy_number}</p>
-                                  <p><span className="font-medium">Carrier:</span> {policy.carrier} • {policy.product}</p>
+                                  <p><span className="font-medium">Carrier:</span> {policy.carrier} • {normalizeProductName(policy.carrier, policy.product)}</p>
                                   <div className="flex items-center gap-2">
                                     <span className="font-medium">Status:</span>
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -996,7 +997,7 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                           <tr key={idx} className="hover:bg-gray-50">
                             <td className="px-4 py-3 text-sm text-gray-900">{policy.client}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{policy.carrier}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{policy.product}</td>
+                            <td className="px-4 py-3 text-sm text-gray-900">{normalizeProductName(policy.carrier, policy.product)}</td>
                             <td className="px-4 py-3 text-sm">
                               <span className={`inline-flex px-2 text-xs font-semibold rounded-full ${
                                 policy.policy_status === 'Active' ? 'bg-green-100 text-green-800' :

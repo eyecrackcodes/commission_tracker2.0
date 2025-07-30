@@ -16,6 +16,7 @@ import SlackNotificationModal from "@/components/SlackNotificationModal";
 import { getCarrierOptions, getProductOptions } from "@/lib/carriers";
 import { getPaymentPeriodForPolicy } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
+import { normalizeProductName } from "@/lib/productNormalization";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
@@ -1083,7 +1084,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                       {policy.policy_number}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      {policy.product}
+                      {normalizeProductName(policy.carrier, policy.product)}
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       <span

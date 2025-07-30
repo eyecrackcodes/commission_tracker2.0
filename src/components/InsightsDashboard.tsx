@@ -22,6 +22,7 @@ import {
 import { format, startOfMonth, subMonths, parseISO } from "date-fns";
 import { calculateChargebacks, getChargebackAlertLevel } from "@/lib/chargeback";
 import { generateReconciliationSummary, formatAlertMessage } from "@/lib/reconciliation";
+import { normalizeProductName } from "@/lib/productNormalization";
 
 interface InsightsData {
   monthlyCommissions: Array<{
@@ -270,8 +271,10 @@ export default function InsightsDashboard() {
     const productMap = new Map<string, { value: number; count: number }>();
 
     policies.forEach((policy) => {
-      const existing = productMap.get(policy.product) || { value: 0, count: 0 };
-      productMap.set(policy.product, {
+      // Apply product normalization logic to ensure consistent naming
+      const normalizedProduct = normalizeProductName(policy.carrier, policy.product);
+      const existing = productMap.get(normalizedProduct) || { value: 0, count: 0 };
+      productMap.set(normalizedProduct, {
         value: existing.value + policy.commission_due,
         count: existing.count + 1,
       });
