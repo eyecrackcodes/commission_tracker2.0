@@ -604,25 +604,50 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                   })()}
 
                   {/* Reconciliation Options */}
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <h4 className="text-sm font-medium text-green-800 mb-3">Notification Options</h4>
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={reconciliationOptions.sendCompletionNotification}
-                          onChange={(e) => setReconciliationOptions(prev => ({
-                            ...prev,
-                            sendCompletionNotification: e.target.checked
-                          }))}
-                          className="h-4 w-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
-                        />
-                        <span className="text-sm text-green-700">
-                          📬 Send completion notification to Slack (confirms all verified commissions are correct)
-                        </span>
-                      </label>
-                    </div>
-                  </div>
+                  {(() => {
+                    const summary = calculateReconciliationSummary();
+                    const hasIssues = summary.missingCommission > 0 || summary.requestRemoval > 0;
+                    const allOnSpreadsheet = summary.onSpreadsheet === summary.totalPolicies && summary.totalPolicies > 0;
+                    
+                    return (
+                      <div className={`border rounded-lg p-4 ${
+                        allOnSpreadsheet ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
+                      }`}>
+                        <h4 className={`text-sm font-medium mb-3 ${
+                          allOnSpreadsheet ? 'text-green-800' : 'text-gray-700'
+                        }`}>Notification Options</h4>
+                        <div className="space-y-2">
+                          <label className={`flex items-center gap-2 ${hasIssues ? 'opacity-50' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={reconciliationOptions.sendCompletionNotification && !hasIssues}
+                              disabled={hasIssues}
+                              onChange={(e) => setReconciliationOptions(prev => ({
+                                ...prev,
+                                sendCompletionNotification: e.target.checked
+                              }))}
+                              className="h-4 w-4 text-green-600 rounded border-gray-300 focus:ring-green-500 disabled:opacity-50"
+                            />
+                            <span className={`text-sm ${
+                              allOnSpreadsheet ? 'text-green-700' : hasIssues ? 'text-gray-500' : 'text-gray-700'
+                            }`}>
+                              📬 Send completion notification to Slack (confirms all verified commissions are correct)
+                            </span>
+                          </label>
+                          {hasIssues && (
+                            <p className="text-xs text-orange-600 ml-6">
+                              ⚠️ Cannot send completion notification when reporting issues or requesting removals
+                            </p>
+                          )}
+                          {allOnSpreadsheet && !hasIssues && (
+                            <p className="text-xs text-green-600 ml-6">
+                              ✅ All policies marked as correct - completion notification available
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Policy list with improved UI */}
                   <div className="space-y-3">
@@ -687,20 +712,30 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
 
                             {/* Action Selection - Radio Buttons */}
                             <div className="border-t pt-3">
-                              <div className="text-sm font-medium text-gray-700 mb-3">Reconciliation Action:</div>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="text-sm font-medium text-gray-700">Reconciliation Action:</div>
+                                {policyState?.action && (
+                                  <div className="text-xs text-gray-500">
+                                    💡 Click again to uncheck and come back later
+                                  </div>
+                                )}
+                              </div>
                               <div className="space-y-2">
                                 <label className="flex items-center gap-3 p-2 rounded-md hover:bg-gray-50 cursor-pointer">
                                   <input
                                     type="radio"
                                     name={`action-${policy.id}`}
                                     checked={policyState?.action === 'on_spreadsheet'}
-                                    onChange={() => setReconciliationData(prev => ({
-                                      ...prev,
-                                      [policy.id]: {
-                                        ...prev[policy.id],
-                                        action: 'on_spreadsheet'
-                                      }
-                                    }))}
+                                    onChange={() => {
+                                      const newAction = policyState?.action === 'on_spreadsheet' ? null : 'on_spreadsheet';
+                                      setReconciliationData(prev => ({
+                                        ...prev,
+                                        [policy.id]: {
+                                          ...prev[policy.id],
+                                          action: newAction
+                                        }
+                                      }));
+                                    }}
                                     className="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500"
                                     disabled={isChargeback}
                                   />
@@ -717,13 +752,16 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                     type="radio"
                                     name={`action-${policy.id}`}
                                     checked={policyState?.action === 'missing_commission'}
-                                    onChange={() => setReconciliationData(prev => ({
-                                      ...prev,
-                                      [policy.id]: {
-                                        ...prev[policy.id],
-                                        action: 'missing_commission'
-                                      }
-                                    }))}
+                                    onChange={() => {
+                                      const newAction = policyState?.action === 'missing_commission' ? null : 'missing_commission';
+                                      setReconciliationData(prev => ({
+                                        ...prev,
+                                        [policy.id]: {
+                                          ...prev[policy.id],
+                                          action: newAction
+                                        }
+                                      }));
+                                    }}
                                     className="h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500"
                                   />
                                   <div className="flex-1">
@@ -739,13 +777,18 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                     type="radio"
                                     name={`action-${policy.id}`}
                                     checked={policyState?.action === 'request_removal'}
-                                    onChange={() => setReconciliationData(prev => ({
-                                      ...prev,
-                                      [policy.id]: {
-                                        ...prev[policy.id],
-                                        action: 'request_removal'
-                                      }
-                                    }))}
+                                    onChange={() => {
+                                      const newAction = policyState?.action === 'request_removal' ? null : 'request_removal';
+                                      setReconciliationData(prev => ({
+                                        ...prev,
+                                        [policy.id]: {
+                                          ...prev[policy.id],
+                                          action: newAction,
+                                          // Clear removal reason if unchecking
+                                          removalReason: newAction === 'request_removal' ? prev[policy.id]?.removalReason || '' : ''
+                                        }
+                                      }));
+                                    }}
                                     className="h-4 w-4 text-orange-600 border-gray-300 focus:ring-orange-500"
                                   />
                                   <div className="flex-1">
