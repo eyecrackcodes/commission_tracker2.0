@@ -314,3 +314,159 @@ export async function testSlackConnection(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Send improved reconciliation alert with grouped notifications
+ */
+export async function sendReconciliationAlertV2(
+  groups: Array<{
+    type: 'missing_commission' | 'removal_request' | 'reconciliation_complete';
+    policies: Array<{
+      policyId: number;
+      client: string;
+      policyNumber: string;
+      carrier: string;
+      product: string;
+      commission: number;
+      priority?: 'normal' | 'urgent';
+      reason?: string;
+      status?: string;
+    }>;
+    totalAmount: number;
+  }>,
+  paymentPeriod: string,
+  userName?: string,
+  userImageUrl?: string
+): Promise<boolean> {
+  try {
+    if (!process.env.SLACK_BOT_TOKEN) {
+      console.error("Slack bot token not configured");
+      return false;
+    }
+
+    // Use reconciliation channel if available, otherwise fall back to main channel
+    const channelId = process.env.SLACK_RECONCILIATION_CHANNEL_ID || process.env.SLACK_CHANNEL_ID;
+    if (!channelId) {
+      console.error("Slack configuration missing - no channel ID available");
+      return false;
+    }
+
+    if (!groups || groups.length === 0) {
+      console.log("No reconciliation groups to report");
+      return true;
+    }
+
+    const formattedPaymentDate = new Date(paymentPeriod).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    // Create separate messages for different types
+    const results = [];
+
+    for (const group of groups) {
+      let message = '';
+      let emoji = '';
+
+      switch (group.type) {
+        case 'missing_commission':
+          emoji = '🚨';
+          message = `**Commission Reconciliation Alert**\n\n**Missing/Incorrect Commissions:**\n`;
+          
+          group.policies.forEach(policy => {
+            const priorityFlag = policy.priority === 'urgent' ? ' [URGENT]' : '';
+            message += `• ${policy.client} • ${policy.carrier} • ${new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              minimumFractionDigits: 2,
+            }).format(policy.commission)}${priorityFlag}\n`;
+          });
+
+          message += `\n**Total Missing: ${new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            minimumFractionDigits: 2,
+          }).format(group.totalAmount)}**\n`;
+          break;
+
+        case 'removal_request':
+          emoji = '📝';
+          message = `**Policy Removal Request**\n\n**Remove from Spreadsheet:**\n`;
+          
+          group.policies.forEach(policy => {
+            message += `• ${policy.client} • ${policy.carrier} • ${new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              minimumFractionDigits: 2,
+            }).format(policy.commission)}\n`;
+            if (policy.reason) {
+              message += `  *Reason: ${policy.reason}*\n`;
+            }
+          });
+
+          message += `\n**Total Amount: ${new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            minimumFractionDigits: 2,
+          }).format(group.totalAmount)}**\n`;
+          break;
+
+        case 'reconciliation_complete':
+          emoji = '✅';
+          message = `**Commission Reconciliation Complete**\n\n**Verified Accurate:**\n`;
+          message += `• ${group.policies.length} ${group.policies.length === 1 ? 'policy' : 'policies'} confirmed on spreadsheet\n`;
+          message += `• **Total Commission: ${new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: "USD",
+            minimumFractionDigits: 2,
+          }).format(group.totalAmount)}**\n`;
+          break;
+      }
+
+      message += `\n**Agent:** ${userName || 'Unknown'}\n**Payment Period:** ${formattedPaymentDate}`;
+
+      // Create the Slack message
+      const blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `${emoji} ${message}`,
+          },
+          accessory: userImageUrl
+            ? {
+                type: "image",
+                image_url: userImageUrl,
+                alt_text: userName || "Agent",
+              }
+            : undefined,
+        },
+      ];
+
+      const result = await slack.chat.postMessage({
+        channel: channelId,
+        text: `${emoji} Reconciliation ${group.type.replace('_', ' ')}`,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        blocks: blocks as any[],
+      });
+
+      results.push(result.ok);
+
+      if (!result.ok) {
+        console.error(`Failed to send ${group.type} alert:`, result.error);
+      }
+    }
+
+    const allSuccessful = results.every(result => result);
+    if (allSuccessful) {
+      console.log("All reconciliation alerts sent to Slack successfully");
+    }
+
+    return allSuccessful;
+  } catch (error) {
+    console.error("Error sending reconciliation alert v2:", error);
+    return false;
+  }
+}

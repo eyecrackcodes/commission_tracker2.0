@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs";
 import { clerkClient } from "@clerk/nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import { sendQuickPost, sendReconciliationAlert, sendCancellationCommissionAlert } from "@/lib/slack";
+import { sendQuickPost, sendReconciliationAlert, sendCancellationCommissionAlert, sendReconciliationAlertV2 } from "@/lib/slack";
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,6 +65,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true });
       } else {
         return NextResponse.json({ error: "Failed to send cancellation alert" }, { status: 500 });
+      }
+    } else if (type === 'reconciliation_alert_v2') {
+      // Handle improved reconciliation alerts with grouped notifications
+      const result = await sendReconciliationAlertV2(
+        data.groups,
+        data.paymentPeriod,
+        userName,
+        userImageUrl
+      );
+
+      if (result) {
+        return NextResponse.json({ success: true });
+      } else {
+        return NextResponse.json({ error: "Failed to send reconciliation alert v2" }, { status: 500 });
       }
     } else {
       return NextResponse.json({ error: "Unsupported notification type" }, { status: 400 });
