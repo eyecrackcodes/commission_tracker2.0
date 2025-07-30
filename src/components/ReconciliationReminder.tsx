@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { format, parseISO, isEqual, subDays } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
 import { getUpcomingPaymentPeriods } from "@/lib/commissionCalendar";
 
 interface ReconciliationReminderProps {
@@ -22,13 +22,13 @@ export default function ReconciliationReminder({ onStartReconciliation }: Reconc
 
       const nextPayment = upcomingPayments[0];
       const paymentDate = parseISO(nextPayment.date);
-      const reconciliationStart = subDays(paymentDate, 2); // Wednesday (2 days before Friday)
-      const reconciliationEnd = subDays(paymentDate, 1);   // Thursday (1 day before Friday)
+      // Commission sheets come out 9 days before payment (e.g., July 30 for Aug 8 payment)
+      const reconciliationStart = subDays(paymentDate, 9); 
+      const reconciliationEnd = subDays(paymentDate, 1);   // Day before payment
 
-      // Check if today is Wednesday or Thursday before payment
+      // Check if today is in the reconciliation period (9 days before to 1 day before payment)
       const isReconciliationPeriod = (
-        isEqual(today.toDateString(), reconciliationStart.toDateString()) ||
-        isEqual(today.toDateString(), reconciliationEnd.toDateString())
+        (today >= reconciliationStart && today <= reconciliationEnd)
       );
 
       if (isReconciliationPeriod) {
@@ -108,7 +108,7 @@ export default function ReconciliationReminder({ onStartReconciliation }: Reconc
                     Payment date: <strong>{format(parseISO(nextPaymentDate), 'EEEE, MMMM do, yyyy')}</strong>
                   </p>
                   <p className="text-sm text-yellow-700 mt-1">
-                    Review your commission spreadsheet and verify all policies before payment processing.
+                    Commission spreadsheets are available! Cross-reference with our application and verify all policies.
                   </p>
                 </div>
               </div>

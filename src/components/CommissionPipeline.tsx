@@ -784,6 +784,14 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                         action: newAction
                                       }
                                     }));
+                                    
+                                    // Auto-uncheck completion notification if marking as missing commission
+                                    if (newAction === 'missing_commission') {
+                                      setReconciliationOptions(prev => ({
+                                        ...prev,
+                                        sendCompletionNotification: false
+                                      }));
+                                    }
                                   }}
                                 >
                                   <input
@@ -816,6 +824,14 @@ export default function CommissionPipeline({ refreshKey, onPolicyUpdate }: Commi
                                         removalReason: newAction === 'request_removal' ? prev[policy.id]?.removalReason || '' : ''
                                       }
                                     }));
+                                    
+                                    // Auto-uncheck completion notification if requesting removal
+                                    if (newAction === 'request_removal') {
+                                      setReconciliationOptions(prev => ({
+                                        ...prev,
+                                        sendCompletionNotification: false
+                                      }));
+                                    }
                                   }}
                                 >
                                   <input

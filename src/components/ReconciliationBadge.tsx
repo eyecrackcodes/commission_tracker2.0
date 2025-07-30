@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { parseISO, subDays, isEqual } from "date-fns";
+import { parseISO, subDays } from "date-fns";
 import { getUpcomingPaymentPeriods } from "@/lib/commissionCalendar";
 
 interface ReconciliationBadgeProps {
@@ -21,13 +21,13 @@ export default function ReconciliationBadge({ onClick }: ReconciliationBadgeProp
 
       const nextPayment = upcomingPayments[0];
       const paymentDate = parseISO(nextPayment.date);
-      const reconciliationStart = subDays(paymentDate, 2); // Wednesday
-      const reconciliationEnd = subDays(paymentDate, 1);   // Thursday
+      // Commission sheets come out 9 days before payment (e.g., July 30 for Aug 8 payment)
+      const reconciliationStart = subDays(paymentDate, 9);
+      const reconciliationEnd = subDays(paymentDate, 1);   // Day before payment
 
-      // Check if today is Wednesday or Thursday before payment
+      // Check if today is in the reconciliation period (9 days before to 1 day before payment)
       const isReconciliationTime = (
-        isEqual(today.toDateString(), reconciliationStart.toDateString()) ||
-        isEqual(today.toDateString(), reconciliationEnd.toDateString())
+        (today >= reconciliationStart && today <= reconciliationEnd)
       );
 
       setIsReconciliationPeriod(isReconciliationTime);
