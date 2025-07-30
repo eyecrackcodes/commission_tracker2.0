@@ -122,13 +122,23 @@ export function getPaymentDatesForMonth(month: number, year: number = 2025): Com
   return calendar[monthName] || [];
 }
 
-// Determine which payment period a policy falls into
-export function getPaymentPeriodForPolicy(policyDate: Date | string): {
+// Determine which payment period a policy falls into based on inforce date (when commission becomes due)
+export function getPaymentPeriodForPolicy(inforceDate: Date | string | null, fallbackDate?: Date | string): {
   paymentDate: CommissionPaymentDate | null;
   isInCurrentPeriod: boolean;
   daysUntilPayment: number;
 } {
-  const date = typeof policyDate === 'string' ? parseISO(policyDate) : policyDate;
+  // Use inforce_date when available, otherwise fall back to provided date (e.g., created_at)
+  const effectiveDate = inforceDate || fallbackDate;
+  if (!effectiveDate) {
+    return {
+      paymentDate: null,
+      isInCurrentPeriod: false,
+      daysUntilPayment: 0
+    };
+  }
+  
+  const date = typeof effectiveDate === 'string' ? parseISO(effectiveDate) : effectiveDate;
   const allDates = getAllPaymentDates();
   const today = new Date();
   
@@ -188,7 +198,7 @@ export function getUpcomingPaymentPeriods(count: number = 3): CommissionPaymentD
 
 // Calculate expected commission for a payment period
 export function calculateExpectedCommissionForPeriod(
-  policies: Array<{ created_at: string; commission_due: number; date_policy_verified: string | null }>,
+  policies: Array<{ created_at: string; inforce_date: string | null; commission_due: number; date_policy_verified: string | null }>,
   periodEndDate: string
 ): {
   expectedAmount: number;
@@ -197,7 +207,7 @@ export function calculateExpectedCommissionForPeriod(
   policyCount: number;
   verifiedCount: number;
   unverifiedCount: number;
-  policies: Array<{ created_at: string; commission_due: number; date_policy_verified: string | null }>;
+  policies: Array<{ created_at: string; inforce_date: string | null; commission_due: number; date_policy_verified: string | null }>;
 } {
   const periodEnd = endOfDay(parseISO(periodEndDate));
   
@@ -212,10 +222,11 @@ export function calculateExpectedCommissionForPeriod(
     }
   }
   
-  // Filter policies that fall within this period (include both paid and unpaid)
+  // Filter policies that fall within this period based on inforce_date (when commission becomes due)
+  // If inforce_date is null, fall back to created_at (for policies not yet in-force)
   const periodPolicies = policies.filter(policy => {
-    const policyDate = parseISO(policy.created_at);
-    const isInPeriod = isAfter(policyDate, periodStart) && (isBefore(policyDate, periodEnd) || isEqual(startOfDay(policyDate), startOfDay(periodEnd)));
+    const commissionDate = policy.inforce_date ? parseISO(policy.inforce_date) : parseISO(policy.created_at);
+    const isInPeriod = isAfter(commissionDate, periodStart) && (isBefore(commissionDate, periodEnd) || isEqual(startOfDay(commissionDate), startOfDay(periodEnd)));
     
     return isInPeriod;
   });

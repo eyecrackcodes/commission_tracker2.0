@@ -1107,7 +1107,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       {(() => {
-                        const paymentInfo = getPaymentPeriodForPolicy(policy.created_at);
+                        const paymentInfo = getPaymentPeriodForPolicy(policy.inforce_date, policy.created_at);
                         if (!policy.date_policy_verified && paymentInfo.paymentDate) {
                           return (
                             <div>

@@ -23,6 +23,7 @@ A comprehensive commission management system for life insurance agents featuring
 - **Policy-Level Verification**: Track individual policy commission status
 - **Cross-Reference Tools**: Match internal records with external spreadsheets
 - **Smart Defaulting**: Auto-populate based on existing verification status
+- **🎯 Inforce Date Logic**: Policies mapped to payment periods based on inforce date (when commission becomes due), not creation date
 
 ### 📱 **NEW: Professional Slack Integration**
 - **Consolidated Notifications**: Grouped alerts instead of spam

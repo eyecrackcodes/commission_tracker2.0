@@ -35,8 +35,8 @@
 ### Critical Dates
 - **Policy Entry Date**: When you created this policy in the system
 - **First Payment Date**: When client's first premium payment is due
-- **Inforce Date**: When policy coverage officially begins
-- **🎯 Date Verified**: When YOU confirmed commission was actually paid
+- **🎯 Inforce Date**: When policy coverage officially begins (3 business days after first payment when bank confirms funds transfer) - **THIS determines which payment period your commission appears in**
+- **Date Verified**: When YOU confirmed commission was actually paid
 
 ### Commission Tracking
 - **Commission Due**: Calculated commission amount (Premium × Rate)
@@ -189,8 +189,14 @@ Instead of scattered alerts, the system sends **professional, grouped messages**
 The Pipeline tab shows **future commission payments** by period:
 - **Next 6 Payment Periods**: Upcoming commission opportunities
 - **Expected Amount**: Based on unverified policies
-- **Policy Count**: Number of policies in each period
+- **Policy Count**: Number of policies in each period (based on **inforce date**)
 - **Days Until Payment**: Countdown to payment date
+
+#### 🎯 **Important: Pipeline Mapping Logic**
+**Policies appear in payment periods based on their INFORCE DATE, not policy creation date!**
+- **Inforce Date**: When bank confirms funds transferred (typically 3 business days after first payment)
+- **Fallback**: If no inforce date set, uses policy creation date
+- **Why**: Commission becomes due when policy is officially in-force, not when you first entered it
 
 ### Pipeline Strategy
 1. **Review Regularly**: Check pipeline weekly
