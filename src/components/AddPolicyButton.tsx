@@ -7,6 +7,7 @@ import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
 import { getCarrierOptions, getProductOptions } from "@/lib/carriers";
+import { useImpersonation } from "@/context/ImpersonationContext";
 
 interface PolicyFormData {
   client: string;
@@ -51,6 +52,7 @@ export default function AddPolicyButton({
   const [productOptions, setProductOptions] = useState<string[]>([]);
   const { register, handleSubmit, reset, watch, setValue } = useForm<PolicyFormData>();
   const { user } = useUser();
+  const { effectiveUserId } = useImpersonation();
 
   // Watch carrier changes
   const carrierValue = watch("carrier");
@@ -157,18 +159,17 @@ export default function AddPolicyButton({
   };
 
   const onSubmit = async (data: PolicyFormData) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
 
     try {
       console.log("Submitting policy data:", data);
 
-      // Use the commission rate selected by the user in the form (convert from percentage to decimal)
       const commissionRate = Number(data.commission_rate) / 100;
 
       const { error } = await supabase.from("policies").insert([
         {
           ...data,
-          user_id: user.id,
+          user_id: effectiveUserId,
           commission_rate: commissionRate,
           created_at: data.created_at || new Date().toISOString(),
         },

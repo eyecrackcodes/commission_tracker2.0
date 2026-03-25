@@ -8,14 +8,13 @@ import {
   useCallback,
 } from "react";
 import { supabase, Policy } from "@/lib/supabase";
-import { useUser } from "@clerk/nextjs";
-// Removed differenceInMonths import - no longer using tenure calculations
 import { useForm } from "react-hook-form";
 import AddPolicyButton from "@/components/AddPolicyButton";
 import SlackNotificationModal from "@/components/SlackNotificationModal";
 import { getCarrierOptions, getProductOptions } from "@/lib/carriers";
 import { getPaymentPeriodForPolicy } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
+import { useImpersonation } from "@/context/ImpersonationContext";
 
 export interface PolicyTableRef {
   fetchPolicies: () => Promise<void>;
@@ -88,7 +87,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
   
   const [slackPolicyData, setSlackPolicyData] = useState<SlackPolicyData | null>(null);
 
-  const { user } = useUser();
+  const { effectiveUserId } = useImpersonation();
   const { register, handleSubmit, reset, setValue, watch } =
     useForm<EditPolicyFormData>();
 
@@ -121,7 +120,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
   }));
 
   const fetchPolicies = useCallback(async () => {
-    if (!user) return;
+    if (!effectiveUserId) return;
 
     try {
       setLoading(true);
@@ -130,7 +129,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
       const { data, error: supabaseError } = await supabase
         .from("policies")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", effectiveUserId)
         .order("created_at", { ascending: false });
 
       if (supabaseError) {
@@ -148,13 +147,13 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [effectiveUserId]);
 
   useEffect(() => {
-    if (user) {
+    if (effectiveUserId) {
       fetchPolicies();
     }
-  }, [user, fetchPolicies]);
+  }, [effectiveUserId, fetchPolicies]);
 
   const applyFilters = useCallback(() => {
     console.log("Starting filter application with:", {
@@ -331,14 +330,14 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
   // Removed tenure calculation - agents now set their own commission rates
 
   const handleDelete = async (id: number) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
 
     try {
       const { error } = await supabase
         .from("policies")
         .delete()
         .eq("id", id)
-        .eq("user_id", user.id);
+        .eq("user_id", effectiveUserId);
 
       if (error) throw error;
       setPolicies(policies.filter((policy) => policy.id !== id));
@@ -378,7 +377,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
   };
 
   const onSubmitEdit = async (data: EditPolicyFormData) => {
-    if (!user || !editingPolicy) return;
+    if (!effectiveUserId || !editingPolicy) return;
 
     try {
       setError(null);
@@ -439,7 +438,7 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
         .from("policies")
         .update(formattedData)
         .eq("id", editingPolicy.id)
-        .eq("user_id", user.id);
+        .eq("user_id", effectiveUserId);
 
       if (error) {
         console.error("Supabase error details:", error);

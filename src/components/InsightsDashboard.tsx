@@ -690,7 +690,7 @@ export default function InsightsDashboard() {
             <XAxis dataKey="month" />
             <YAxis />
             <Tooltip
-              formatter={(value: number) => `$${value.toLocaleString()}`}
+              formatter={(value) => `$${Number(value).toLocaleString()}`}
             />
             <Legend />
             <Area
@@ -744,7 +744,7 @@ export default function InsightsDashboard() {
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value: number) => `$${value.toLocaleString()}`}
+                formatter={(value) => `$${Number(value).toLocaleString()}`}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -778,7 +778,7 @@ export default function InsightsDashboard() {
               <XAxis type="number" />
               <YAxis dataKey="carrier" type="category" width={100} />
               <Tooltip
-                formatter={(value: number) => `$${value.toLocaleString()}`}
+                formatter={(value) => `$${Number(value).toLocaleString()}`}
               />
               <Legend />
               <Bar dataKey="commission" fill="#3B82F6" name="Commission" />
@@ -978,7 +978,7 @@ export default function InsightsDashboard() {
               <XAxis dataKey="month" />
               <YAxis />
               <Tooltip
-                formatter={(value: number) => `$${value.toLocaleString()}`}
+                formatter={(value) => `$${Number(value).toLocaleString()}`}
               />
               <Area
                 type="monotone"

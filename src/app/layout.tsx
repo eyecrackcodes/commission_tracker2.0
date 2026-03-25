@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ImpersonationProvider } from "@/context/ImpersonationContext";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -26,11 +27,13 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <header className="flex justify-between items-center p-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Luminary Life</h1>
-              <ThemeToggle />
-            </header>
-            <main className="min-h-screen bg-gray-50 dark:bg-gray-900">{children}</main>
+            <ImpersonationProvider>
+              <header className="flex justify-between items-center p-4 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Luminary Life</h1>
+                <ThemeToggle />
+              </header>
+              <main className="min-h-screen bg-gray-50 dark:bg-gray-900">{children}</main>
+            </ImpersonationProvider>
           </ThemeProvider>
         </body>
       </html>

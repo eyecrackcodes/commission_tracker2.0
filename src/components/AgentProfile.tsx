@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
+import { useImpersonation } from "@/context/ImpersonationContext";
 
 interface AgentProfile {
   id?: number | null;
@@ -15,6 +16,7 @@ interface AgentProfile {
 
 export default function AgentProfile() {
   const { user } = useUser();
+  const { effectiveUserId, isImpersonating } = useImpersonation();
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,11 +24,14 @@ export default function AgentProfile() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
-    if (!user) return;
+    if (!effectiveUserId) return;
 
     try {
       setError(null);
-      const response = await fetch("/api/agent-profile");
+      const url = isImpersonating
+        ? `/api/agent-profile?userId=${effectiveUserId}`
+        : "/api/agent-profile";
+      const response = await fetch(url);
 
       if (!response.ok) {
         const errorData = await response
@@ -36,10 +41,8 @@ export default function AgentProfile() {
       }
 
       const data = await response.json();
-      
-      // Handle the response - it will always have a structure now
+
       if (data) {
-        // Ensure specializations is always an array
         if (!Array.isArray(data.specializations)) {
           data.specializations = data.specializations ? [data.specializations] : [];
         }
@@ -51,15 +54,16 @@ export default function AgentProfile() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [effectiveUserId, isImpersonating]);
 
   useEffect(() => {
-    if (user) {
+    if (effectiveUserId) {
+      setIsLoading(true);
       fetchProfile();
     } else {
       setIsLoading(false);
     }
-  }, [user, fetchProfile]);
+  }, [effectiveUserId, fetchProfile]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -303,14 +307,16 @@ export default function AgentProfile() {
                 </p>
               </div>
 
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setIsEditing(true)}
-                  className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Edit Profile
-                </button>
-              </div>
+              {!isImpersonating && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    Edit Profile
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
