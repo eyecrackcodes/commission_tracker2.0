@@ -46,12 +46,13 @@ export type Policy = {
 };
 
 export type AgentProfile = {
-  id: number;
+  id: string;
   user_id: string;
   start_date: string | null;
   license_number: string | null;
   specializations: string[] | null;
   notes: string | null;
+  role: "agent" | "admin";
   created_at: string;
   updated_at: string;
 };

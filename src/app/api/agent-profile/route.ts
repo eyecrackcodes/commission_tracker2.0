@@ -14,20 +14,36 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
 // GET handler to fetch the agent profile
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const { userId } = auth();
 
     if (!userId) {
-      console.error("No user ID found in auth()");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log("Fetching profile for user:", userId);
+    const { searchParams } = new URL(request.url);
+    const targetUserId = searchParams.get("userId");
+
+    let effectiveUserId = userId;
+
+    if (targetUserId && targetUserId !== userId) {
+      const { data: adminProfile } = await supabaseClient
+        .from("agent_profiles")
+        .select("role")
+        .eq("user_id", userId)
+        .single();
+
+      if (!adminProfile || adminProfile.role !== "admin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      effectiveUserId = targetUserId;
+    }
+
     const { data: profile, error } = await supabaseClient
       .from("agent_profiles")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", effectiveUserId)
       .single();
 
     if (error) {
@@ -39,13 +55,11 @@ export async function GET() {
     }
 
     if (!profile) {
-      console.log("No profile found, attempting to create one");
-      // Try to create a profile if it doesn't exist
       const { data: newProfile, error: createError } = await supabaseClient
         .from("agent_profiles")
         .insert([
           {
-            user_id: userId,
+            user_id: effectiveUserId,
             start_date: new Date().toISOString().split("T")[0],
           },
         ])

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
 import { calculateCommissionRate } from "@/lib/commission";
+import { useImpersonation } from "@/context/ImpersonationContext";
 
 interface PolicyFormData {
   client: string;
@@ -46,6 +47,7 @@ export default function AddPolicyButton({
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
   const { register, handleSubmit, reset } = useForm<PolicyFormData>();
   const { user } = useUser();
+  const { effectiveUserId } = useImpersonation();
 
   useEffect(() => {
     const fetchAgentProfile = async () => {
@@ -131,12 +133,11 @@ export default function AddPolicyButton({
   };
 
   const onSubmit = async (data: PolicyFormData) => {
-    if (!user) return;
+    if (!effectiveUserId) return;
 
     try {
       console.log("Submitting policy data:", data);
 
-      // Calculate commission rate based on tenure
       const commissionRate = calculateCommissionRate(
         agentProfile?.start_date || null
       );
@@ -144,7 +145,7 @@ export default function AddPolicyButton({
       const { error } = await supabase.from("policies").insert([
         {
           ...data,
-          user_id: user.id,
+          user_id: effectiveUserId,
           commission_rate: commissionRate,
           created_at: new Date().toISOString(),
         },
