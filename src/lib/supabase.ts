@@ -49,6 +49,8 @@ export type Policy = {
 export type AgentProfile = {
   id: string;
   user_id: string;
+  first_name: string | null;
+  last_name: string | null;
   start_date: string | null;
   license_number: string | null;
   specializations: string[] | null;

@@ -14,6 +14,8 @@ interface PolicyStats {
 interface Agent {
   id: string;
   user_id: string;
+  first_name: string | null;
+  last_name: string | null;
   license_number: string | null;
   specializations: string | null;
   start_date: string | null;
@@ -52,16 +54,23 @@ export default function AdminDashboard() {
     fetchAgents();
   }, []);
 
+  const getAgentDisplayName = (agent: Agent) => {
+    if (agent.first_name || agent.last_name) {
+      return `${agent.first_name || ""} ${agent.last_name || ""}`.trim();
+    }
+    return `Agent ...${agent.user_id.slice(-8)}`;
+  };
+
   const handleImpersonate = (agent: Agent) => {
-    const displayName =
-      agent.license_number || agent.user_id.slice(-8);
-    startImpersonation(agent.user_id, displayName);
+    startImpersonation(agent.user_id, getAgentDisplayName(agent));
     router.push("/dashboard");
   };
 
   const filteredAgents = agents.filter((agent) => {
     const search = searchTerm.toLowerCase();
+    const fullName = `${agent.first_name || ""} ${agent.last_name || ""}`.toLowerCase();
     return (
+      fullName.includes(search) ||
       agent.user_id.toLowerCase().includes(search) ||
       (agent.license_number?.toLowerCase().includes(search) ?? false)
     );
@@ -206,7 +215,7 @@ export default function AdminDashboard() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by ID or license..."
+                placeholder="Search by name, ID, or license..."
                 className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pl-10"
               />
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
@@ -257,6 +266,9 @@ export default function AdminDashboard() {
                 <tr key={agent.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
+                      {getAgentDisplayName(agent)}
+                    </div>
+                    <div className="text-xs text-gray-400">
                       ...{agent.user_id.slice(-8)}
                     </div>
                   </td>

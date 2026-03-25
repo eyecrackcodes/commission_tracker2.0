@@ -7,6 +7,8 @@ import { useImpersonation } from "@/context/ImpersonationContext";
 interface AgentProfile {
   id?: number | null;
   user_id: string;
+  first_name: string | null;
+  last_name: string | null;
   license_number: string | null;
   specializations: string[] | null;
   notes: string | null;
@@ -280,6 +282,15 @@ export default function AgentProfile() {
             </form>
           ) : (
             <div className="space-y-4 md:space-y-6">
+              {(profile?.first_name || profile?.last_name) && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Name</h3>
+                  <p className="mt-1 text-sm md:text-base text-gray-900">
+                    {`${profile.first_name || ""} ${profile.last_name || ""}`.trim()}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <h3 className="text-sm font-medium text-gray-500">
                   License Number

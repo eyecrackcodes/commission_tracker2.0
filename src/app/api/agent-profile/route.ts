@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs";
+import { auth, clerkClient } from "@clerk/nextjs";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -76,9 +76,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (!profile) {
+      let firstName: string | null = null;
+      let lastName: string | null = null;
+      try {
+        const clerkUser = await clerkClient.users.getUser(effectiveUserId);
+        firstName = clerkUser.firstName || null;
+        lastName = clerkUser.lastName || null;
+      } catch { /* ignore */ }
+
       return NextResponse.json({
         id: null,
         user_id: effectiveUserId,
+        first_name: firstName,
+        last_name: lastName,
         license_number: null,
         specializations: null,
         notes: null,
@@ -87,7 +97,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Parse specializations to ensure it's an array
+    if (!profile.first_name && !profile.last_name) {
+      try {
+        const clerkUser = await clerkClient.users.getUser(profile.user_id);
+        const firstName = clerkUser.firstName || null;
+        const lastName = clerkUser.lastName || null;
+        if (firstName || lastName) {
+          await supabaseClient
+            .from("agent_profiles")
+            .update({ first_name: firstName, last_name: lastName })
+            .eq("id", profile.id);
+          profile.first_name = firstName;
+          profile.last_name = lastName;
+        }
+      } catch { /* ignore */ }
+    }
+
     const parsedProfile = {
       ...profile,
       specializations: parseSpecializations(profile.specializations)
