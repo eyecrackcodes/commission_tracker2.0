@@ -45,16 +45,11 @@ export const carriers: CarrierProduct[] = [
 ];
 
 const REDUCED_RATE_RULES: Array<{
-  carrier?: string;
+  carrier: string;
   productPatterns: RegExp[];
 }> = [
   { carrier: "AIG", productPatterns: [/guaranteed\s*issue/i, /\bgi\b/i] },
   { carrier: "Mutual of Omaha", productPatterns: [/graded/i] },
-];
-
-const UNIVERSAL_REDUCED_PATTERNS: RegExp[] = [
-  /guaranteed\s*issue/i,
-  /\bgi\b/i,
 ];
 
 export function getCommissionTier(
@@ -65,19 +60,11 @@ export function getCommissionTier(
   const normalizedProduct = product.trim().toLowerCase();
 
   for (const rule of REDUCED_RATE_RULES) {
-    if (rule.carrier && normalizedCarrier.includes(rule.carrier.toLowerCase())) {
+    if (normalizedCarrier.includes(rule.carrier.toLowerCase())) {
       if (rule.productPatterns.some((p) => p.test(normalizedProduct))) {
         return "reduced";
       }
     }
-  }
-
-  if (UNIVERSAL_REDUCED_PATTERNS.some((p) => p.test(normalizedProduct))) {
-    return "reduced";
-  }
-
-  if (/graded/i.test(normalizedProduct)) {
-    return "reduced";
   }
 
   return "standard";
