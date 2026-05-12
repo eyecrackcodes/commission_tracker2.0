@@ -1,11 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import {
-  shouldUpdateCommissionRate,
-  calculateCommissionRate,
-} from "@/lib/commission";
+import { differenceInMonths, parseISO } from "date-fns";
+import { getCommissionTier, COMMISSION_RATES, REDUCED_TIER_CAP } from "@/lib/carriers";
 
-// Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -15,54 +12,73 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+const PERSISTENCE_MONTHS = 3;
+
 export async function GET() {
   try {
-    // Fetch all agent profiles
-    const { data: profiles, error: profilesError } = await supabase
-      .from("agent_profiles")
-      .select("user_id, start_date");
+    const { data: policies, error: fetchError } = await supabase
+      .from("policies")
+      .select("id, carrier, product, commission_rate, commission_tier, persistence_status, policy_status, inforce_date, created_at, cancelled_date, commissionable_annual_premium")
+      .in("persistence_status", ["pending"]);
 
-    if (profilesError) {
-      throw profilesError;
-    }
+    if (fetchError) throw fetchError;
 
-    const updates = [];
+    const updates: Array<{ id: number; action: string }> = [];
+    const now = new Date();
 
-    // Check each profile for commission rate updates
-    for (const profile of profiles) {
-      if (shouldUpdateCommissionRate(profile.start_date)) {
-        const newRate = calculateCommissionRate(profile.start_date);
+    for (const policy of policies || []) {
+      const placementDate = policy.inforce_date || policy.created_at;
+      if (!placementDate) continue;
 
-        // Update all policies for this agent
-        const { error: updateError } = await supabase
-          .from("policies")
-          .update({ commission_rate: newRate })
-          .eq("user_id", profile.user_id);
+      const monthsSincePlacement = differenceInMonths(now, parseISO(placementDate));
 
-        if (updateError) {
-          console.error(
-            `Error updating policies for user ${profile.user_id}:`,
-            updateError
-          );
-          continue;
+      if (policy.policy_status === "Cancelled" && policy.cancelled_date) {
+        const monthsToCancel = differenceInMonths(
+          parseISO(policy.cancelled_date),
+          parseISO(placementDate)
+        );
+
+        if (monthsToCancel < PERSISTENCE_MONTHS) {
+          const tier = (policy.commission_tier as "standard" | "reduced") ||
+            getCommissionTier(policy.carrier, policy.product);
+          const rate = COMMISSION_RATES[tier];
+          let chargebackAmount = policy.commissionable_annual_premium * rate;
+          if (tier === "reduced") {
+            chargebackAmount = Math.min(chargebackAmount, REDUCED_TIER_CAP);
+          }
+
+          await supabase
+            .from("policies")
+            .update({
+              persistence_status: "failed",
+              chargeback_amount: chargebackAmount,
+              chargeback_date: now.toISOString(),
+            })
+            .eq("id", policy.id);
+
+          updates.push({ id: policy.id, action: "chargeback_applied" });
         }
+      } else if (
+        monthsSincePlacement >= PERSISTENCE_MONTHS &&
+        policy.policy_status !== "Cancelled"
+      ) {
+        await supabase
+          .from("policies")
+          .update({ persistence_status: "met" })
+          .eq("id", policy.id);
 
-        updates.push({
-          userId: profile.user_id,
-          oldRate: 0.05,
-          newRate,
-        });
+        updates.push({ id: policy.id, action: "persistence_met" });
       }
     }
 
     return NextResponse.json({
-      message: "Commission rate update check completed",
+      message: `Processed ${policies?.length || 0} policies, ${updates.length} updated`,
       updates,
     });
   } catch (error) {
-    console.error("Error updating commission rates:", error);
+    console.error("Error processing persistence check:", error);
     return NextResponse.json(
-      { error: "Failed to update commission rates" },
+      { error: "Failed to process persistence check" },
       { status: 500 }
     );
   }

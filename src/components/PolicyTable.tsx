@@ -11,7 +11,7 @@ import { supabase, Policy } from "@/lib/supabase";
 import { useForm } from "react-hook-form";
 import AddPolicyButton from "@/components/AddPolicyButton";
 import SlackNotificationModal from "@/components/SlackNotificationModal";
-import { getCarrierOptions, getProductOptions } from "@/lib/carriers";
+import { getCarrierOptions, getProductOptions, getCommissionTier, COMMISSION_RATES } from "@/lib/carriers";
 import { getPaymentPeriodForPolicy } from "@/lib/commissionCalendar";
 import { format, parseISO } from "date-fns";
 import { useImpersonation } from "@/context/ImpersonationContext";
@@ -94,17 +94,25 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
   // Watch carrier changes in edit form
   const editCarrierValue = watch("carrier");
 
+  const editProductValue = watch("product");
+
   useEffect(() => {
     if (editCarrierValue && editingPolicy) {
       setEditingCarrier(editCarrierValue);
       const products = getProductOptions(editCarrierValue);
       setEditingProductOptions(products);
-      // Only reset product if carrier actually changed
       if (editCarrierValue !== editingPolicy.carrier) {
         setValue("product", "");
       }
     }
   }, [editCarrierValue, editingPolicy, setValue]);
+
+  useEffect(() => {
+    if (editCarrierValue && editProductValue && editingPolicy) {
+      const tier = getCommissionTier(editCarrierValue, editProductValue);
+      setValue("commission_rate", COMMISSION_RATES[tier] * 100);
+    }
+  }, [editCarrierValue, editProductValue, editingPolicy, setValue]);
 
   const viewPolicy = useCallback((policyId: number) => {
     const policy = policies.find(p => p.id === policyId);
@@ -403,27 +411,25 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
 
       // No longer tracking cancellation status - Slack alerts only from NotificationCenter
 
-      // Format the data for update
+      const carrier = data.carrier?.trim() || editingPolicy.carrier;
+      const product = data.product?.trim() || editingPolicy.product;
+      const tier = getCommissionTier(carrier, product);
+
       const formattedData = {
         client: data.client?.trim() || editingPolicy.client,
-        carrier: data.carrier?.trim() || editingPolicy.carrier,
+        carrier,
         policy_number: data.policy_number?.trim() || editingPolicy.policy_number,
-        product: data.product?.trim() || editingPolicy.product,
+        product,
         policy_status: finalPolicyStatus,
         commissionable_annual_premium: annualPremium,
         commission_rate: commissionRate,
+        commission_tier: tier,
         first_payment_date: data.first_payment_date || null,
         type_of_payment: data.type_of_payment || null,
         inforce_date: data.inforce_date || null,
         date_policy_verified: data.date_policy_verified || null,
         comments: data.comments || null,
         created_at: data.created_at || editingPolicy.created_at,
-        // Temporarily commented out cancelled_date logic until migration is run
-        // cancelled_date: data.policy_status === 'Cancelled' && editingPolicy.policy_status !== 'Cancelled'
-        //   ? new Date().toISOString()
-        //   : data.policy_status !== 'Cancelled' && editingPolicy.policy_status === 'Cancelled'
-        //   ? null
-        //   : editingPolicy.cancelled_date, // Keep existing value if no status change
       };
 
       // Note: commission_due is a generated column and will be automatically calculated by the database
@@ -1101,8 +1107,16 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                       ${policy.commissionable_annual_premium.toLocaleString()}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
-                      ${policy.commission_due.toFixed(2).toLocaleString()}
+                    <td className="px-3 py-4 whitespace-nowrap text-sm">
+                      <div className="text-gray-900 dark:text-gray-100">
+                        ${policy.commission_due.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {(policy.commission_rate * 100).toFixed(0)}%
+                        {policy.commission_tier === "reduced" && (
+                          <span className="ml-1 text-amber-600">(GI/Graded)</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-4 whitespace-nowrap text-sm">
                       {(() => {
@@ -1355,13 +1369,18 @@ const PolicyTable = forwardRef<PolicyTableRef, PolicyTableProps>(({ onPolicyUpda
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Commission Rate
+                        {editingPolicy && editingPolicy.commission_tier === "reduced" && (
+                          <span className="text-xs text-amber-600 ml-2">(GI/Graded - capped at $200)</span>
+                        )}
                       </label>
                       <select
                         {...register("commission_rate", { required: true })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                       >
-                        <option value="5">5%</option>
-                        <option value="20">20%</option>
+                        <option value="30">30% - Standard</option>
+                        <option value="15">15% - GI/Graded ($200 cap)</option>
+                        <option value="20">20% (Legacy)</option>
+                        <option value="5">5% (Legacy)</option>
                       </select>
                     </div>
                   </div>

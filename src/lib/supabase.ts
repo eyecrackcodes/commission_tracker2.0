@@ -37,6 +37,10 @@ export type Policy = {
   commissionable_annual_premium: number;
   commission_rate: number;
   commission_due: number;
+  commission_tier: "standard" | "reduced";
+  persistence_status: "pending" | "met" | "failed";
+  chargeback_amount: number;
+  chargeback_date: string | null;
   first_payment_date: string | null;
   type_of_payment: string | null;
   inforce_date: string | null;

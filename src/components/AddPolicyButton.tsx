@@ -1,12 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { supabase } from "@/lib/supabase";
-import { useUser } from "@clerk/nextjs";
 import confetti from "canvas-confetti";
-import { calculateCommissionRate } from "@/lib/commission";
-import { getCarrierOptions, getProductOptions } from "@/lib/carriers";
+import { getCarrierOptions, getProductOptions, getCommissionTier, COMMISSION_RATES, type CommissionTier } from "@/lib/carriers";
 import { useImpersonation } from "@/context/ImpersonationContext";
 
 interface PolicyFormData {
@@ -28,10 +26,6 @@ interface AddPolicyButtonProps {
   onPolicyAdded?: (policyData?: PolicyFormData) => void;
 }
 
-interface AgentProfile {
-  start_date: string | null;
-}
-
 interface ConfettiOptions {
   origin: { y: number; x?: number };
   zIndex?: number;
@@ -46,69 +40,32 @@ export default function AddPolicyButton({
   onPolicyAdded,
 }: AddPolicyButtonProps) {
   const [showModal, setShowModal] = useState(false);
-  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedCarrier, setSelectedCarrier] = useState("");
   const [productOptions, setProductOptions] = useState<string[]>([]);
+  const [detectedTier, setDetectedTier] = useState<CommissionTier>("standard");
   const { register, handleSubmit, reset, watch, setValue } = useForm<PolicyFormData>();
-  const { user } = useUser();
   const { effectiveUserId } = useImpersonation();
 
-  // Watch carrier changes
   const carrierValue = watch("carrier");
+  const productValue = watch("product");
 
   useEffect(() => {
     if (carrierValue) {
       setSelectedCarrier(carrierValue);
       const products = getProductOptions(carrierValue);
       setProductOptions(products);
-      // Reset product selection when carrier changes
       setValue("product", "");
     }
   }, [carrierValue, setValue]);
 
   useEffect(() => {
-    const fetchAgentProfile = async () => {
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+    if (carrierValue && productValue) {
+      const tier = getCommissionTier(carrierValue, productValue);
+      setDetectedTier(tier);
+      setValue("commission_rate", COMMISSION_RATES[tier] * 100);
+    }
+  }, [carrierValue, productValue, setValue]);
 
-      try {
-        console.log("Fetching agent profile for user:", user.id);
-        const response = await fetch("/api/agent-profile");
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("Error fetching agent profile:", errorData);
-          // Even if there's an error, we'll set a default profile to allow policy creation
-          setAgentProfile({ start_date: new Date().toISOString().split('T')[0] });
-          setIsLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        console.log("Received agent profile:", data);
-
-        if (data) {
-          setAgentProfile({
-            start_date: data.start_date || new Date().toISOString().split('T')[0],
-          });
-        } else {
-          console.log("No agent profile data received, using default");
-          setAgentProfile({ start_date: new Date().toISOString().split('T')[0] });
-        }
-      } catch (err) {
-        console.error("Error in fetchAgentProfile:", err);
-        // Even if there's an error, we'll set a default profile to allow policy creation
-        setAgentProfile({ start_date: new Date().toISOString().split('T')[0] });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAgentProfile();
-  }, [user]);
 
   const triggerConfetti = () => {
     const count = 200;
@@ -162,15 +119,15 @@ export default function AddPolicyButton({
     if (!effectiveUserId) return;
 
     try {
-      console.log("Submitting policy data:", data);
-
       const commissionRate = Number(data.commission_rate) / 100;
+      const tier = getCommissionTier(data.carrier, data.product);
 
       const { error } = await supabase.from("policies").insert([
         {
           ...data,
           user_id: effectiveUserId,
           commission_rate: commissionRate,
+          commission_tier: tier,
           created_at: data.created_at || new Date().toISOString(),
         },
       ]);
@@ -206,10 +163,7 @@ export default function AddPolicyButton({
     <>
       <button
         onClick={() => setShowModal(true)}
-        disabled={isLoading}
-        className={`inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
-          isLoading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
-        } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
       >
         <svg
           className="h-4 w-4 mr-2"
@@ -224,7 +178,7 @@ export default function AddPolicyButton({
             d="M12 6v6m0 0v6m0-6h6m-6 0H6"
           />
         </svg>
-        {isLoading ? 'Loading...' : 'Add Policy'}
+        Add Policy
       </button>
 
       {showModal && (
@@ -413,18 +367,17 @@ export default function AddPolicyButton({
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Commission Rate
+                        {detectedTier === "reduced" && (
+                          <span className="text-xs text-amber-600 ml-2">(GI/Graded - capped at $200)</span>
+                        )}
                       </label>
                       <select
                         {...register("commission_rate", { required: true })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        defaultValue={
-                          agentProfile?.start_date 
-                            ? (calculateCommissionRate(agentProfile.start_date) * 100).toString()
-                            : "5"
-                        }
+                        defaultValue="30"
                       >
-                        <option value="5">5%</option>
-                        <option value="20">20%</option>
+                        <option value="30">30% - Standard</option>
+                        <option value="15">15% - GI/Graded ($200 cap)</option>
                       </select>
                     </div>
                   </div>

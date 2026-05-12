@@ -1,9 +1,19 @@
-import { isAfter, isBefore, isEqual, parseISO, startOfDay, endOfDay } from "date-fns";
+import {
+  isAfter,
+  isBefore,
+  isEqual,
+  parseISO,
+  startOfDay,
+  endOfDay,
+  lastDayOfMonth,
+  addMonths,
+} from "date-fns";
 
 export interface CommissionPaymentDate {
   date: string;
   dayOfWeek: string;
-  paymentType: string;
+  paymentType: "hourly_first_half" | "hourly_second_half" | "advanced_commission";
+  periodStart: string;
   periodEnd: string;
 }
 
@@ -11,180 +21,177 @@ export interface CommissionCalendar {
   [month: string]: CommissionPaymentDate[];
 }
 
-// DigitalBGA Commission Calendar for 2025
-const commissionCalendar2025: CommissionCalendar = {
-  january: [
-    { date: "2025-01-10", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-01-03" },
-    { date: "2025-01-24", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-01-17" },
-    { date: "2025-01-31", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-01-31" }
-  ],
-  february: [
-    { date: "2025-02-14", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-02-07" },
-    { date: "2025-02-28", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-02-21" }
-  ],
-  march: [
-    { date: "2025-03-14", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-03-07" },
-    { date: "2025-03-28", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-03-21" }
-  ],
-  april: [
-    { date: "2025-04-11", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-04-04" },
-    { date: "2025-04-25", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-04-18" }
-  ],
-  may: [
-    { date: "2025-05-09", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-05-02" },
-    { date: "2025-05-23", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-05-16" },
-    { date: "2025-05-30", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-05-30" }
-  ],
-  june: [
-    { date: "2025-06-13", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-06-06" },
-    { date: "2025-06-27", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-06-20" }
-  ],
-  july: [
-    { date: "2025-07-11", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-07-04" },
-    { date: "2025-07-25", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-07-18" }
-  ],
-  august: [
-    { date: "2025-08-08", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-08-01" },
-    { date: "2025-08-22", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-08-15" },
-    { date: "2025-08-29", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-08-29" }
-  ],
-  september: [
-    { date: "2025-09-12", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-09-05" },
-    { date: "2025-09-26", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-09-19" }
-  ],
-  october: [
-    { date: "2025-10-10", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-10-03" },
-    { date: "2025-10-24", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-10-17" },
-    { date: "2025-10-31", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-10-31" }
-  ],
-  november: [
-    { date: "2025-11-14", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-11-07" },
-    { date: "2025-11-28", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-11-21" }
-  ],
-  december: [
-    { date: "2025-12-12", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-12-05" },
-    { date: "2025-12-26", dayOfWeek: "Friday", paymentType: "Commissions Pay Date", periodEnd: "2025-12-19" }
-  ]
-};
+function generateMonthlySchedule(
+  year: number,
+  month: number
+): CommissionPaymentDate[] {
+  const dates: CommissionPaymentDate[] = [];
+  const monthStr = String(month).padStart(2, "0");
+  const lastDay = lastDayOfMonth(new Date(year, month - 1)).getDate();
 
-// Get all payment dates as a flat array
-export function getAllPaymentDates(year: number = 2025): CommissionPaymentDate[] {
-  const calendar = year === 2025 ? commissionCalendar2025 : commissionCalendar2025; // Add more years as needed
-  const allDates: CommissionPaymentDate[] = [];
-  
-  Object.values(calendar).forEach(monthDates => {
-    allDates.push(...monthDates);
+  const hourlyFirstHalf = new Date(year, month - 1, 20);
+  dates.push({
+    date: `${year}-${monthStr}-20`,
+    dayOfWeek: hourlyFirstHalf.toLocaleDateString("en-US", { weekday: "long" }),
+    paymentType: "hourly_first_half",
+    periodStart: `${year}-${monthStr}-01`,
+    periodEnd: `${year}-${monthStr}-15`,
   });
-  
-  return allDates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const nextMonth = addMonths(new Date(year, month - 1, 1), 1);
+  const nextYear = nextMonth.getFullYear();
+  const nextMonthStr = String(nextMonth.getMonth() + 1).padStart(2, "0");
+  const hourlySecondHalf = new Date(nextYear, nextMonth.getMonth(), 5);
+  dates.push({
+    date: `${nextYear}-${nextMonthStr}-05`,
+    dayOfWeek: hourlySecondHalf.toLocaleDateString("en-US", {
+      weekday: "long",
+    }),
+    paymentType: "hourly_second_half",
+    periodStart: `${year}-${monthStr}-16`,
+    periodEnd: `${year}-${monthStr}-${lastDay}`,
+  });
+
+  const prevMonth = new Date(year, month - 2, 1);
+  const prevYear = prevMonth.getFullYear();
+  const prevMonthStr = String(prevMonth.getMonth() + 1).padStart(2, "0");
+  const prevLastDay = lastDayOfMonth(prevMonth).getDate();
+  const commissionPayDate = new Date(year, month - 1, 20);
+  dates.push({
+    date: `${year}-${monthStr}-20`,
+    dayOfWeek: commissionPayDate.toLocaleDateString("en-US", {
+      weekday: "long",
+    }),
+    paymentType: "advanced_commission",
+    periodStart: `${prevYear}-${prevMonthStr}-01`,
+    periodEnd: `${prevYear}-${prevMonthStr}-${prevLastDay}`,
+  });
+
+  return dates;
 }
 
-// Get the next payment date from today
-export function getNextPaymentDate(fromDate: Date = new Date()): CommissionPaymentDate | null {
-  const allDates = getAllPaymentDates();
+export function getAllPaymentDates(year: number = 2026): CommissionPaymentDate[] {
+  const allDates: CommissionPaymentDate[] = [];
+
+  for (let month = 1; month <= 12; month++) {
+    allDates.push(...generateMonthlySchedule(year, month));
+  }
+
+  return allDates.sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+}
+
+export function getCommissionPaymentDates(
+  year: number = 2026
+): CommissionPaymentDate[] {
+  return getAllPaymentDates(year).filter(
+    (d) => d.paymentType === "advanced_commission"
+  );
+}
+
+export function getHourlyPaymentDates(
+  year: number = 2026
+): CommissionPaymentDate[] {
+  return getAllPaymentDates(year).filter(
+    (d) =>
+      d.paymentType === "hourly_first_half" ||
+      d.paymentType === "hourly_second_half"
+  );
+}
+
+export function getNextPaymentDate(
+  fromDate: Date = new Date()
+): CommissionPaymentDate | null {
+  const allDates = getCommissionPaymentDates(fromDate.getFullYear());
   const today = startOfDay(fromDate);
-  
+
   for (const paymentDate of allDates) {
     const payDate = startOfDay(parseISO(paymentDate.date));
     if (isAfter(payDate, today) || isEqual(payDate, today)) {
       return paymentDate;
     }
   }
-  
-  return null;
+
+  const nextYearDates = getCommissionPaymentDates(fromDate.getFullYear() + 1);
+  return nextYearDates[0] || null;
 }
 
-// Get the previous payment date from today
-export function getPreviousPaymentDate(fromDate: Date = new Date()): CommissionPaymentDate | null {
-  const allDates = getAllPaymentDates();
+export function getPreviousPaymentDate(
+  fromDate: Date = new Date()
+): CommissionPaymentDate | null {
+  const allDates = getCommissionPaymentDates(fromDate.getFullYear());
   const today = startOfDay(fromDate);
-  
+
   for (let i = allDates.length - 1; i >= 0; i--) {
     const payDate = startOfDay(parseISO(allDates[i].date));
     if (isBefore(payDate, today)) {
       return allDates[i];
     }
   }
-  
+
   return null;
 }
 
-// Get payment dates for a specific month
-export function getPaymentDatesForMonth(month: number, year: number = 2025): CommissionPaymentDate[] {
-  const monthNames = [
-    'january', 'february', 'march', 'april', 'may', 'june',
-    'july', 'august', 'september', 'october', 'november', 'december'
-  ];
-  
-  const monthName = monthNames[month - 1];
-  const calendar = year === 2025 ? commissionCalendar2025 : commissionCalendar2025;
-  
-  return calendar[monthName] || [];
+export function getPaymentDatesForMonth(
+  month: number,
+  year: number = 2026
+): CommissionPaymentDate[] {
+  return getAllPaymentDates(year).filter((d) => {
+    const payDate = parseISO(d.date);
+    return payDate.getMonth() + 1 === month;
+  });
 }
 
-// Determine which payment period a policy falls into based on inforce date (when commission becomes due)
-export function getPaymentPeriodForPolicy(inforceDate: Date | string | null, fallbackDate?: Date | string): {
+export function getPaymentPeriodForPolicy(
+  inforceDate: Date | string | null,
+  fallbackDate?: Date | string
+): {
   paymentDate: CommissionPaymentDate | null;
   isInCurrentPeriod: boolean;
   daysUntilPayment: number;
 } {
-  // Use inforce_date when available, otherwise fall back to provided date (e.g., created_at)
   const effectiveDate = inforceDate || fallbackDate;
   if (!effectiveDate) {
     return {
       paymentDate: null,
       isInCurrentPeriod: false,
-      daysUntilPayment: 0
+      daysUntilPayment: 0,
     };
   }
-  
-  const date = typeof effectiveDate === 'string' ? parseISO(effectiveDate) : effectiveDate;
-  const allDates = getAllPaymentDates();
+
+  const date =
+    typeof effectiveDate === "string" ? parseISO(effectiveDate) : effectiveDate;
   const today = new Date();
-  
-  // Find which period this policy falls into
-  for (let i = 0; i < allDates.length; i++) {
-    const periodEnd = endOfDay(parseISO(allDates[i].periodEnd));
-    
-    // Check if policy date is before or on the period end date
-    if (isBefore(date, periodEnd) || isEqual(startOfDay(date), startOfDay(periodEnd))) {
-      const paymentDate = parseISO(allDates[i].date);
-      const daysUntilPayment = Math.ceil((paymentDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
-      return {
-        paymentDate: allDates[i],
-        isInCurrentPeriod: daysUntilPayment >= 0,
-        daysUntilPayment: Math.max(0, daysUntilPayment)
-      };
-    }
-  }
-  
-  // If no period found, return the next payment date
+
   const nextPayment = getNextPaymentDate(date);
   if (nextPayment) {
     const paymentDate = parseISO(nextPayment.date);
-    const daysUntilPayment = Math.ceil((paymentDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
+    const daysUntilPayment = Math.ceil(
+      (paymentDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
     return {
       paymentDate: nextPayment,
-      isInCurrentPeriod: false,
-      daysUntilPayment: Math.max(0, daysUntilPayment)
+      isInCurrentPeriod: daysUntilPayment >= 0,
+      daysUntilPayment: Math.max(0, daysUntilPayment),
     };
   }
-  
+
   return {
     paymentDate: null,
     isInCurrentPeriod: false,
-    daysUntilPayment: 0
+    daysUntilPayment: 0,
   };
 }
 
-// Get upcoming payment periods (next 3 payment dates)
-export function getUpcomingPaymentPeriods(count: number = 3): CommissionPaymentDate[] {
-  const allDates = getAllPaymentDates();
+export function getUpcomingPaymentPeriods(
+  count: number = 3
+): CommissionPaymentDate[] {
+  const allDates = getCommissionPaymentDates();
   const today = startOfDay(new Date());
   const upcoming: CommissionPaymentDate[] = [];
-  
+
   for (const paymentDate of allDates) {
     const payDate = startOfDay(parseISO(paymentDate.date));
     if (isAfter(payDate, today) || isEqual(payDate, today)) {
@@ -192,13 +199,17 @@ export function getUpcomingPaymentPeriods(count: number = 3): CommissionPaymentD
       if (upcoming.length >= count) break;
     }
   }
-  
+
   return upcoming;
 }
 
-// Calculate expected commission for a payment period
 export function calculateExpectedCommissionForPeriod(
-  policies: Array<{ created_at: string; inforce_date: string | null; commission_due: number; date_policy_verified: string | null }>,
+  policies: Array<{
+    created_at: string;
+    inforce_date: string | null;
+    commission_due: number;
+    date_policy_verified: string | null;
+  }>,
   periodEndDate: string
 ): {
   expectedAmount: number;
@@ -207,37 +218,47 @@ export function calculateExpectedCommissionForPeriod(
   policyCount: number;
   verifiedCount: number;
   unverifiedCount: number;
-  policies: Array<{ created_at: string; inforce_date: string | null; commission_due: number; date_policy_verified: string | null }>;
+  policies: Array<{
+    created_at: string;
+    inforce_date: string | null;
+    commission_due: number;
+    date_policy_verified: string | null;
+  }>;
 } {
   const periodEnd = endOfDay(parseISO(periodEndDate));
-  
-  // Find the previous period end to determine the start of this period
-  const allDates = getAllPaymentDates();
-  let periodStart = startOfDay(new Date(2025, 0, 1)); // Default to start of year
-  
-  for (let i = 0; i < allDates.length; i++) {
-    if (allDates[i].periodEnd === periodEndDate && i > 0) {
-      periodStart = endOfDay(parseISO(allDates[i - 1].periodEnd));
-      break;
-    }
-  }
-  
-  // Filter policies that fall within this period based on inforce_date (when commission becomes due)
-  // If inforce_date is null, fall back to created_at (for policies not yet in-force)
-  const periodPolicies = policies.filter(policy => {
-    const commissionDate = policy.inforce_date ? parseISO(policy.inforce_date) : parseISO(policy.created_at);
-    const isInPeriod = isAfter(commissionDate, periodStart) && (isBefore(commissionDate, periodEnd) || isEqual(startOfDay(commissionDate), startOfDay(periodEnd)));
-    
-    return isInPeriod;
+  const periodStart = startOfDay(
+    new Date(parseISO(periodEndDate).getFullYear(), parseISO(periodEndDate).getMonth(), 1)
+  );
+
+  const periodPolicies = policies.filter((policy) => {
+    const commissionDate = policy.inforce_date
+      ? parseISO(policy.inforce_date)
+      : parseISO(policy.created_at);
+    return (
+      (isAfter(commissionDate, periodStart) ||
+        isEqual(startOfDay(commissionDate), periodStart)) &&
+      (isBefore(commissionDate, periodEnd) ||
+        isEqual(startOfDay(commissionDate), startOfDay(periodEnd)))
+    );
   });
-  
-  const unverifiedPolicies = periodPolicies.filter(policy => !policy.date_policy_verified);
-  const verifiedPolicies = periodPolicies.filter(policy => policy.date_policy_verified);
-  
-  const expectedAmount = unverifiedPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
-  const verifiedAmount = verifiedPolicies.reduce((sum, policy) => sum + policy.commission_due, 0);
+
+  const unverifiedPolicies = periodPolicies.filter(
+    (policy) => !policy.date_policy_verified
+  );
+  const verifiedPolicies = periodPolicies.filter(
+    (policy) => policy.date_policy_verified
+  );
+
+  const expectedAmount = unverifiedPolicies.reduce(
+    (sum, policy) => sum + policy.commission_due,
+    0
+  );
+  const verifiedAmount = verifiedPolicies.reduce(
+    (sum, policy) => sum + policy.commission_due,
+    0
+  );
   const totalAmount = expectedAmount + verifiedAmount;
-  
+
   return {
     expectedAmount,
     totalAmount,
@@ -245,6 +266,6 @@ export function calculateExpectedCommissionForPeriod(
     policyCount: periodPolicies.length,
     verifiedCount: verifiedPolicies.length,
     unverifiedCount: unverifiedPolicies.length,
-    policies: periodPolicies
+    policies: periodPolicies,
   };
-} 
+}

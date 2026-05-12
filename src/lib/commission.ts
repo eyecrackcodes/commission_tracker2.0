@@ -1,29 +1,158 @@
-import { differenceInMonths } from "date-fns";
+import {
+  type CommissionTier,
+  COMMISSION_RATES,
+  REDUCED_TIER_CAP,
+  MONTHLY_THRESHOLD,
+  getCommissionTier,
+} from "./carriers";
 
-export function calculateCommissionRate(startDate: string | null): number {
-  if (!startDate) {
-    // Default to 5% if no start date is provided
-    return 0.05;
-  }
-
-  const monthsSinceStart = differenceInMonths(new Date(), new Date(startDate));
-
-  // After 6 months, increase to 20%
-  if (monthsSinceStart >= 6) {
-    return 0.2;
-  }
-
-  // First 6 months at 5%
-  return 0.05;
+export interface MonthlyCommissionSummary {
+  month: string;
+  totalEligiblePremium: number;
+  thresholdMet: boolean;
+  premiumAboveThreshold: number;
+  standardCommission: number;
+  reducedCommission: number;
+  totalAdvancedCommissionWage: number;
+  policyCount: number;
+  chargebackAmount: number;
+  netCommission: number;
 }
 
-export function shouldUpdateCommissionRate(startDate: string | null): boolean {
-  if (!startDate) {
-    return false;
+export interface PolicyCommissionDetail {
+  policyId: number;
+  annualPremium: number;
+  tier: CommissionTier;
+  rate: number;
+  rawCommission: number;
+  cappedCommission: number;
+}
+
+export function getCommissionRateForPolicy(
+  carrier: string,
+  product: string
+): { tier: CommissionTier; rate: number } {
+  const tier = getCommissionTier(carrier, product);
+  return { tier, rate: COMMISSION_RATES[tier] };
+}
+
+export function calculatePolicyCommissionAmount(
+  annualPremium: number,
+  tier: CommissionTier
+): number {
+  const rate = COMMISSION_RATES[tier];
+  const raw = annualPremium * rate;
+  if (tier === "reduced") {
+    return Math.min(raw, REDUCED_TIER_CAP);
+  }
+  return raw;
+}
+
+export function calculateMonthlyCommission(
+  policies: Array<{
+    id: number;
+    commissionable_annual_premium: number;
+    carrier: string;
+    product: string;
+    commission_tier?: CommissionTier;
+  }>,
+  chargebackTotal: number = 0
+): MonthlyCommissionSummary & { details: PolicyCommissionDetail[] } {
+  const details: PolicyCommissionDetail[] = [];
+
+  let totalEligiblePremium = 0;
+
+  for (const policy of policies) {
+    const tier = (policy.commission_tier as CommissionTier) ||
+      getCommissionTier(policy.carrier, policy.product);
+    const rate = COMMISSION_RATES[tier];
+    const raw = policy.commissionable_annual_premium * rate;
+    const capped = tier === "reduced" ? Math.min(raw, REDUCED_TIER_CAP) : raw;
+
+    totalEligiblePremium += policy.commissionable_annual_premium;
+
+    details.push({
+      policyId: policy.id,
+      annualPremium: policy.commissionable_annual_premium,
+      tier,
+      rate,
+      rawCommission: raw,
+      cappedCommission: capped,
+    });
   }
 
-  const monthsSinceStart = differenceInMonths(new Date(), new Date(startDate));
+  const thresholdMet = totalEligiblePremium > MONTHLY_THRESHOLD;
+  const premiumAboveThreshold = thresholdMet
+    ? totalEligiblePremium - MONTHLY_THRESHOLD
+    : 0;
 
-  // Check if the agent has just completed 6 months
-  return monthsSinceStart === 6;
+  let standardCommission = 0;
+  let reducedCommission = 0;
+
+  if (thresholdMet) {
+    for (const detail of details) {
+      if (detail.tier === "standard") {
+        standardCommission += detail.cappedCommission;
+      } else {
+        reducedCommission += detail.cappedCommission;
+      }
+    }
+  }
+
+  const totalAdvancedCommissionWage = standardCommission + reducedCommission;
+  const netCommission = Math.max(
+    0,
+    totalAdvancedCommissionWage - chargebackTotal
+  );
+
+  return {
+    month: "",
+    totalEligiblePremium,
+    thresholdMet,
+    premiumAboveThreshold,
+    standardCommission,
+    reducedCommission,
+    totalAdvancedCommissionWage,
+    policyCount: policies.length,
+    chargebackAmount: chargebackTotal,
+    netCommission,
+    details,
+  };
+}
+
+export function getThresholdProgress(totalPremium: number): {
+  current: number;
+  threshold: number;
+  percentage: number;
+  remaining: number;
+  met: boolean;
+} {
+  const percentage = Math.min((totalPremium / MONTHLY_THRESHOLD) * 100, 100);
+  return {
+    current: totalPremium,
+    threshold: MONTHLY_THRESHOLD,
+    percentage,
+    remaining: Math.max(0, MONTHLY_THRESHOLD - totalPremium),
+    met: totalPremium > MONTHLY_THRESHOLD,
+  };
+}
+
+export function getAdvancedWagePaymentDate(activityMonth: Date): Date {
+  const paymentMonth = new Date(activityMonth);
+  paymentMonth.setMonth(paymentMonth.getMonth() + 1);
+  paymentMonth.setDate(20);
+  return paymentMonth;
+}
+
+export function getHourlyWagePaymentDates(month: Date): {
+  firstHalf: Date;
+  secondHalf: Date;
+} {
+  const year = month.getFullYear();
+  const mo = month.getMonth();
+
+  return {
+    firstHalf: new Date(year, mo, 20),
+    secondHalf: new Date(year, mo + 1, 5),
+  };
 }
