@@ -15,6 +15,10 @@ export const MONTHLY_THRESHOLD = 4333.33;
 
 export const carriers: CarrierProduct[] = [
   {
+    name: "AFLAC",
+    products: ["Whole Life", "Term", "Final Expense"],
+  },
+  {
     name: "AIG",
     products: ["Guaranteed Issue", "Term", "Whole Life", "Universal Life"],
   },
@@ -37,6 +41,10 @@ export const carriers: CarrierProduct[] = [
   {
     name: "SBLI",
     products: ["Preferred", "Standard", "Modified"],
+  },
+  {
+    name: "Transamerica",
+    products: ["Preferred", "Standard", "Graded", "Guaranteed Issue", "Term"],
   },
   {
     name: "Other",
