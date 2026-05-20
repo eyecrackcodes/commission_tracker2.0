@@ -1,16 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getAgentNotifications } from "@/lib/notifications";
-
-// Initialize Supabase client with service role key for admin access
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error("Missing Supabase URL or service role key");
-}
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+import { getSupabaseAdmin } from "@/lib/admin";
 
 // GET endpoint for fetching user notifications
 export async function GET(request: Request) {
@@ -24,6 +14,8 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
+
+    const supabase = getSupabaseAdmin();
 
     // Fetch policies for the user
     const { data: policies, error: policiesError } = await supabase
@@ -63,7 +55,8 @@ export async function POST(request: Request) {
 
     if (action === 'daily_check') {
       // This would typically be called by a cron job or scheduled function
-      
+      const supabase = getSupabaseAdmin();
+
       // Get all users with policies
       const { data: users, error: usersError } = await supabase
         .from("policies")

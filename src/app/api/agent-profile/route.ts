@@ -1,17 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error("Missing Supabase URL or service role key");
-}
-
-const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+import { getSupabaseAdmin } from "@/lib/admin";
 
 // Helper function to parse specializations
 function parseSpecializations(specializations: unknown): string[] | null {
@@ -42,6 +32,8 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const supabaseClient = getSupabaseAdmin();
 
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get("userId");
@@ -83,6 +75,33 @@ export async function GET(request: NextRequest) {
         firstName = clerkUser.firstName || null;
         lastName = clerkUser.lastName || null;
       } catch { /* ignore */ }
+
+      // Auto-create profile only for the current user (not when an admin is
+      // viewing someone else's profile). This is a fallback for users whose
+      // user.created webhook never fired (e.g. signed up before webhook was
+      // configured) so they aren't blocked from using the app.
+      if (effectiveUserId === userId) {
+        const today = new Date().toISOString().split("T")[0];
+        const { data: created, error: createErr } = await supabaseClient
+          .from("agent_profiles")
+          .insert({
+            user_id: effectiveUserId,
+            first_name: firstName,
+            last_name: lastName,
+            start_date: today,
+          })
+          .select()
+          .single();
+
+        if (!createErr && created) {
+          return NextResponse.json({
+            ...created,
+            specializations: parseSpecializations(created.specializations),
+          });
+        }
+        // Fall through to default response on insert failure
+        console.error("Auto-create agent_profile failed:", createErr);
+      }
 
       return NextResponse.json({
         id: null,
@@ -137,6 +156,8 @@ export async function POST(request: NextRequest) {
       console.error("No user ID found in auth()");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const supabaseClient = getSupabaseAdmin();
 
     console.log("Processing POST request for user:", userId);
     const body = await request.json();
