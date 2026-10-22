@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
-import { clerkClient } from "@clerk/nextjs";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+import { auth } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
+import { getSupabaseAdmin } from "@/lib/admin";
 
 export async function POST(request: Request) {
   try {
-    const { userId: authenticatedUserId } = auth();
+    const { userId: authenticatedUserId } = await auth();
 
     if (!authenticatedUserId) {
       return NextResponse.json(
@@ -27,6 +22,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const supabase = getSupabaseAdmin();
 
     // Only admins can create profiles for other users
     if (userId !== authenticatedUserId) {
@@ -84,7 +81,8 @@ export async function POST(request: Request) {
     let firstName: string | null = null;
     let lastName: string | null = null;
     try {
-      const clerkUser = await clerkClient.users.getUser(userId);
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser(userId);
       firstName = clerkUser.firstName || null;
       lastName = clerkUser.lastName || null;
     } catch (err) {

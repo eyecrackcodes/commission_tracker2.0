@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { differenceInMonths, parseISO } from "date-fns";
 import { getCommissionTier, COMMISSION_RATES, REDUCED_TIER_CAP } from "@/lib/carriers";
 import { getSupabaseAdmin } from "@/lib/admin";
@@ -8,7 +8,7 @@ const PERSISTENCE_MONTHS = 3;
 
 export async function GET() {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json(

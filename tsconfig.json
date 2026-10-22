@@ -33,7 +33,7 @@
         "./src/*"
       ]
     },
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "allowJs": true,
     "strict": false,
     "noEmit": true,
@@ -52,6 +52,7 @@
     "./src/**/*.ts",
     "./src/**/*.tsx",
     "./scripts/**/*.ts",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ]
 }

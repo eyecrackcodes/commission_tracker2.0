@@ -1,4 +1,5 @@
-import { auth, clerkClient } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/admin";
@@ -27,7 +28,7 @@ function parseSpecializations(specializations: unknown): string[] | null {
 // GET handler to fetch the agent profile
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -71,7 +72,8 @@ export async function GET(request: NextRequest) {
       let firstName: string | null = null;
       let lastName: string | null = null;
       try {
-        const clerkUser = await clerkClient.users.getUser(effectiveUserId);
+        const client = await clerkClient();
+        const clerkUser = await client.users.getUser(effectiveUserId);
         firstName = clerkUser.firstName || null;
         lastName = clerkUser.lastName || null;
       } catch { /* ignore */ }
@@ -118,7 +120,8 @@ export async function GET(request: NextRequest) {
 
     if (!profile.first_name && !profile.last_name) {
       try {
-        const clerkUser = await clerkClient.users.getUser(profile.user_id);
+        const client = await clerkClient();
+        const clerkUser = await client.users.getUser(profile.user_id);
         const firstName = clerkUser.firstName || null;
         const lastName = clerkUser.lastName || null;
         if (firstName || lastName) {
@@ -150,7 +153,7 @@ export async function GET(request: NextRequest) {
 // POST handler to create or update the agent profile
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       console.error("No user ID found in auth()");

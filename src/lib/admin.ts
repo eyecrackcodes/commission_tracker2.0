@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let cachedAdminClient: SupabaseClient | null = null;
@@ -43,7 +43,7 @@ export const supabaseAdmin = new Proxy({} as SupabaseClient, {
 export async function requireAdmin(): Promise<
   { userId: string } | { error: string; status: number }
 > {
-  const { userId } = auth();
+  const { userId } = await auth();
 
   if (!userId) {
     return { error: "Unauthorized", status: 401 };

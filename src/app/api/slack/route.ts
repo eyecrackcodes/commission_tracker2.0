@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { WebClient } from "@slack/web-api";
 
 // Initialize Slack client only on server-side
@@ -7,7 +7,7 @@ const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 
 export async function POST(request: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

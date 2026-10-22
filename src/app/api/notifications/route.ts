@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { getAgentNotifications } from "@/lib/notifications";
 import { getSupabaseAdmin } from "@/lib/admin";
 
 // GET endpoint for fetching user notifications
 export async function GET(request: Request) {
   try {
-    const { userId: authenticatedUserId } = auth();
+    const { userId: authenticatedUserId } = await auth();
 
     if (!authenticatedUserId) {
       return NextResponse.json(
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 // POST endpoint for daily notification processing (could be called by a cron job)
 export async function POST(request: Request) {
   try {
-    const { userId: authenticatedUserId } = auth();
+    const { userId: authenticatedUserId } = await auth();
 
     if (!authenticatedUserId) {
       return NextResponse.json(
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
 // PUT endpoint for updating notification preferences or dismissing notifications
 export async function PUT(request: Request) {
   try {
-    const { userId: authenticatedUserId } = auth();
+    const { userId: authenticatedUserId } = await auth();
 
     if (!authenticatedUserId) {
       return NextResponse.json(

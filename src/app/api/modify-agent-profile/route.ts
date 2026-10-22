@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
-
-// Initialize Supabase client with service role key for admin access
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+import { auth } from "@clerk/nextjs/server";
+import { getSupabaseAdmin } from "@/lib/admin";
 
 export async function POST(request: Request) {
   try {
-    const { userId: authenticatedUserId } = auth();
+    const { userId: authenticatedUserId } = await auth();
 
     if (!authenticatedUserId) {
       return NextResponse.json(
@@ -36,6 +30,7 @@ export async function POST(request: Request) {
     }
 
     // Only admins can modify other users' profiles
+    const supabase = getSupabaseAdmin();
     if (userId !== authenticatedUserId) {
       const { data: adminProfile } = await supabase
         .from("agent_profiles")
