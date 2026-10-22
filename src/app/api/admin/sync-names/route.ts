@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin, supabaseAdmin } from "@/lib/admin";
-import { clerkClient } from "@clerk/nextjs";
+import { clerkClient } from "@clerk/nextjs/server";
 
 export async function POST() {
   const adminCheck = await requireAdmin();
@@ -23,7 +23,8 @@ export async function POST() {
 
   for (const agent of agents) {
     try {
-      const clerkUser = await clerkClient.users.getUser(agent.user_id);
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser(agent.user_id);
       const firstName = clerkUser.firstName || null;
       const lastName = clerkUser.lastName || null;
 

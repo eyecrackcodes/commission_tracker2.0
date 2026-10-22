@@ -1,11 +1,11 @@
-import { auth } from "@clerk/nextjs";
-import { clerkClient } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { sendQuickPost, sendReconciliationAlert, sendCancellationCommissionAlert, sendReconciliationAlertV2 } from "@/lib/slack";
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
     const { type, data } = body;
 
     // Get user details from Clerk including profile picture
-    const user = await clerkClient.users.getUser(userId);
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
     const userImageUrl = user.imageUrl;
     const userName = user.firstName && user.lastName 
       ? `${user.firstName} ${user.lastName}`

@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-// Initialize Supabase client with service role key for admin access
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+import { auth } from "@clerk/nextjs/server";
+import { getSupabaseAdmin } from "@/lib/admin";
 
 export async function POST(request: Request) {
   try {
+    const { userId: authenticatedUserId } = await auth();
+
+    if (!authenticatedUserId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const { userId, startDate } = await request.json();
 
     if (!userId) {
@@ -23,6 +27,23 @@ export async function POST(request: Request) {
         { error: "Start date is required" },
         { status: 400 }
       );
+    }
+
+    // Only admins can modify other users' profiles
+    const supabase = getSupabaseAdmin();
+    if (userId !== authenticatedUserId) {
+      const { data: adminProfile } = await supabase
+        .from("agent_profiles")
+        .select("role")
+        .eq("user_id", authenticatedUserId)
+        .single();
+
+      if (!adminProfile || adminProfile.role !== "admin") {
+        return NextResponse.json(
+          { error: "Forbidden - cannot modify another user's profile" },
+          { status: 403 }
+        );
+      }
     }
 
     // Check if agent profile exists

@@ -1,21 +1,60 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { clerkClient } from "@clerk/nextjs";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+import { auth } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
+import { getSupabaseAdmin } from "@/lib/admin";
 
 export async function POST(request: Request) {
   try {
-    const { userId } = await request.json();
+    const { userId: authenticatedUserId } = await auth();
+
+    if (!authenticatedUserId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const { userId, role } = await request.json();
 
     if (!userId) {
       return NextResponse.json(
         { error: "User ID is required" },
         { status: 400 }
       );
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    // Only admins can create profiles for other users
+    if (userId !== authenticatedUserId) {
+      const { data: adminProfile } = await supabase
+        .from("agent_profiles")
+        .select("role")
+        .eq("user_id", authenticatedUserId)
+        .single();
+
+      if (!adminProfile || adminProfile.role !== "admin") {
+        return NextResponse.json(
+          { error: "Forbidden - cannot create profile for another user" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Validate role if provided (only admins can set roles)
+    if (role && role !== "agent") {
+      const { data: adminProfile } = await supabase
+        .from("agent_profiles")
+        .select("role")
+        .eq("user_id", authenticatedUserId)
+        .single();
+
+      if (!adminProfile || adminProfile.role !== "admin") {
+        return NextResponse.json(
+          { error: "Forbidden - only admins can assign roles" },
+          { status: 403 }
+        );
+      }
     }
 
     const { data: existingProfile, error: fetchError } = await supabase
@@ -42,7 +81,8 @@ export async function POST(request: Request) {
     let firstName: string | null = null;
     let lastName: string | null = null;
     try {
-      const clerkUser = await clerkClient.users.getUser(userId);
+      const client = await clerkClient();
+      const clerkUser = await client.users.getUser(userId);
       firstName = clerkUser.firstName || null;
       lastName = clerkUser.lastName || null;
     } catch (err) {

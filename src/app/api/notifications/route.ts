@@ -1,27 +1,49 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { getAgentNotifications } from "@/lib/notifications";
 import { getSupabaseAdmin } from "@/lib/admin";
 
 // GET endpoint for fetching user notifications
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const { userId: authenticatedUserId } = await auth();
 
-    if (!userId) {
+    if (!authenticatedUserId) {
       return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
+        { error: "Unauthorized" },
+        { status: 401 }
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const requestedUserId = searchParams.get('userId');
+
+    // Users can only access their own notifications unless they're admin
     const supabase = getSupabaseAdmin();
+    let effectiveUserId = authenticatedUserId;
+
+    if (requestedUserId && requestedUserId !== authenticatedUserId) {
+      // Check if user is admin
+      const { data: profile } = await supabase
+        .from("agent_profiles")
+        .select("role")
+        .eq("user_id", authenticatedUserId)
+        .single();
+
+      if (!profile || profile.role !== "admin") {
+        return NextResponse.json(
+          { error: "Forbidden - cannot access other users' notifications" },
+          { status: 403 }
+        );
+      }
+      effectiveUserId = requestedUserId;
+    }
 
     // Fetch policies for the user
     const { data: policies, error: policiesError } = await supabase
       .from("policies")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", effectiveUserId)
       .order("created_at", { ascending: false });
 
     if (policiesError) {
@@ -50,6 +72,30 @@ export async function GET(request: Request) {
 // POST endpoint for daily notification processing (could be called by a cron job)
 export async function POST(request: Request) {
   try {
+    const { userId: authenticatedUserId } = await auth();
+
+    if (!authenticatedUserId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    // Only admins can trigger daily checks
+    const supabase = getSupabaseAdmin();
+    const { data: profile } = await supabase
+      .from("agent_profiles")
+      .select("role")
+      .eq("user_id", authenticatedUserId)
+      .single();
+
+    if (!profile || profile.role !== "admin") {
+      return NextResponse.json(
+        { error: "Forbidden - admin access required" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { action } = body;
 
@@ -114,6 +160,30 @@ export async function POST(request: Request) {
     } else if (action === 'mark_notification_seen') {
       // Handle marking notifications as seen
       const { notificationId, userId } = body;
+
+      // Validate input
+      if (!notificationId || !userId) {
+        return NextResponse.json(
+          { error: "Missing required fields" },
+          { status: 400 }
+        );
+      }
+
+      // Users can only mark their own notifications
+      if (userId !== authenticatedUserId) {
+        const { data: adminProfile } = await supabase
+          .from("agent_profiles")
+          .select("role")
+          .eq("user_id", authenticatedUserId)
+          .single();
+
+        if (!adminProfile || adminProfile.role !== "admin") {
+          return NextResponse.json(
+            { error: "Forbidden - cannot modify other users' notifications" },
+            { status: 403 }
+          );
+        }
+      }
       
       // In a full implementation, you'd store this in a notifications table
       console.log(`Marking notification ${notificationId} as seen for user ${userId}`);
@@ -142,8 +212,42 @@ export async function POST(request: Request) {
 // PUT endpoint for updating notification preferences or dismissing notifications
 export async function PUT(request: Request) {
   try {
+    const { userId: authenticatedUserId } = await auth();
+
+    if (!authenticatedUserId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { action, userId, notificationId } = body;
+
+    // Validate input
+    if (!action || !userId || !notificationId) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    // Users can only modify their own notifications
+    if (userId !== authenticatedUserId) {
+      const supabase = getSupabaseAdmin();
+      const { data: profile } = await supabase
+        .from("agent_profiles")
+        .select("role")
+        .eq("user_id", authenticatedUserId)
+        .single();
+
+      if (!profile || profile.role !== "admin") {
+        return NextResponse.json(
+          { error: "Forbidden - cannot modify other users' notifications" },
+          { status: 403 }
+        );
+      }
+    }
 
     if (action === 'dismiss_notification') {
       // In a full implementation, you'd update a notifications table
@@ -156,6 +260,14 @@ export async function PUT(request: Request) {
 
     } else if (action === 'snooze_notification') {
       const { snoozeUntil } = body;
+
+      if (!snoozeUntil) {
+        return NextResponse.json(
+          { error: "snoozeUntil is required" },
+          { status: 400 }
+        );
+      }
+
       console.log(`Snoozing notification ${notificationId} until ${snoozeUntil}`);
       
       return NextResponse.json({

@@ -6,10 +6,10 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 
 export default async function Home() {
-  const { userId } = auth();
+  const { userId } = await auth();
 
   if (userId) {
     redirect("/dashboard");
