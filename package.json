@@ -10,14 +10,14 @@
   },
   "dependencies": {
     "@clerk/clerk-sdk-node": "^4.13.23",
-    "@clerk/nextjs": "^4.29.9",
+    "@clerk/nextjs": "^7.9.19",
     "@slack/web-api": "^7.9.3",
     "@supabase/supabase-js": "^2.39.8",
     "@types/canvas-confetti": "^1.9.0",
     "canvas-confetti": "^1.9.3",
     "date-fns": "^3.5.0",
     "dotenv": "^16.4.7",
-    "next": "^14.2.25",
+    "next": "^16.4.2",
     "next-themes": "^0.4.6",
     "react": "^18.2.0",
     "react-confetti": "^6.4.0",
@@ -39,5 +39,8 @@
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.4.2"
+  },
+  "overrides": {
+    "form-data": "^4.0.1"
   }
 }

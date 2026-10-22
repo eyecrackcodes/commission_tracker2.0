@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs";
 import { differenceInMonths, parseISO } from "date-fns";
 import { getCommissionTier, COMMISSION_RATES, REDUCED_TIER_CAP } from "@/lib/carriers";
 import { getSupabaseAdmin } from "@/lib/admin";
@@ -7,7 +8,30 @@ const PERSISTENCE_MONTHS = 3;
 
 export async function GET() {
   try {
+    const { userId } = auth();
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    // Only admins can trigger commission rate updates
     const supabase = getSupabaseAdmin();
+    const { data: profile, error: profileError } = await supabase
+      .from("agent_profiles")
+      .select("role")
+      .eq("user_id", userId)
+      .single();
+
+    if (profileError || !profile || profile.role !== "admin") {
+      return NextResponse.json(
+        { error: "Forbidden - admin access required" },
+        { status: 403 }
+      );
+    }
+
     const { data: policies, error: fetchError } = await supabase
       .from("policies")
       .select("id, carrier, product, commission_rate, commission_tier, persistence_status, policy_status, inforce_date, created_at, cancelled_date, commissionable_annual_premium")
